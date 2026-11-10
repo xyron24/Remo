@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 import requests
 
+from remo import lang as lang_mod
 from remo.log import get_logger
 from remo.memory import Change, Memory, WatchedItem
 
@@ -78,11 +79,14 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def poll_github_issue(url: str, cursor: str, token: str = "", fetch=_fetch) -> tuple[str, list[Delta]]:
+def poll_github_issue(
+    url: str, cursor: str, token: str = "", fetch=_fetch, lang: str = "hi"
+) -> tuple[str, list[Delta]]:
     """New state/title/comments on one issue or PR since the cursor."""
     match = _GITHUB_ISSUE.search(url)
     if not match:
         raise ValueError(f"not a GitHub issue URL: {url}")
+    s = lang_mod.strings(lang)
     owner, repo, number = match.groups()
     seen = _parse_cursor(cursor)
     deltas: list[Delta] = []
@@ -92,12 +96,12 @@ def poll_github_issue(url: str, cursor: str, token: str = "", fetch=_fetch) -> t
     comments = fetch(f"{API}/repos/{owner}/{repo}/issues/{number}/comments", {"per_page": "100"})
     if not seen:
         deltas.append(
-            Delta(summary=f"Issue #{number} {state} hai, {len(comments)} comments ke saath. Ab se nazar rahegi.",
+            Delta(summary=s["baseline_issue"].format(number=number, state=state, n=len(comments)),
                   link=issue.get("html_url", url), at=time.time())
         )
     elif seen.get("state") != state or seen.get("title") != title:
         deltas.append(
-            Delta(summary=f"Issue #{number} ab {state} hai: {title}.",
+            Delta(summary=s["state_change"].format(number=number, state=state, title=title),
                   link=issue.get("html_url", url), at=time.time())
         )
     last_id = int(seen.get("last_comment_id", 0))
@@ -107,7 +111,7 @@ def poll_github_issue(url: str, cursor: str, token: str = "", fetch=_fetch) -> t
         body = (comment.get("body") or "").strip().splitlines()
         first_line = body[0][:160] if body else ""
         deltas.append(
-            Delta(summary=f"Issue #{number} par {who} ka naya comment.",
+            Delta(summary=s["new_comment"].format(number=number, who=who),
                   quote=first_line, link=comment.get("html_url", url),
                   at=_parse_time(comment.get("created_at", "")))
         )
@@ -123,11 +127,14 @@ def _parse_time(value: str) -> float:
     return _iso_to_ts(value) or time.time()
 
 
-def poll_github_repo(url: str, cursor: str, token: str = "", fetch=_fetch) -> tuple[str, list[Delta]]:
+def poll_github_repo(
+    url: str, cursor: str, token: str = "", fetch=_fetch, lang: str = "hi"
+) -> tuple[str, list[Delta]]:
     """New commits on the default branch since the cursor."""
     match = _GITHUB_REPO.search(url)
     if not match:
         raise ValueError(f"not a GitHub repo URL: {url}")
+    s = lang_mod.strings(lang)
     owner, repo = match.groups()
     seen = _parse_cursor(cursor)
     params = {"per_page": "20"}
@@ -139,7 +146,7 @@ def poll_github_repo(url: str, cursor: str, token: str = "", fetch=_fetch) -> tu
     if not seen and commits:
         first = (commits[0].get("commit", {}).get("message") or "").strip().splitlines()
         deltas.append(
-            Delta(summary=f"Repo par nazar shuru. Taaza commit: {first[0][:160] if first else ''}.",
+            Delta(summary=s["repo_baseline"].format(msg=first[0][:160] if first else ""),
                   link=commits[0].get("html_url", url), at=time.time())
         )
     if not seen:
@@ -153,14 +160,14 @@ def poll_github_repo(url: str, cursor: str, token: str = "", fetch=_fetch) -> tu
         if date and (not newest or date > newest):
             newest = date
         deltas.append(
-            Delta(summary=f"Naya commit {sha}: {first_line}.",
+            Delta(summary=s["new_commit"].format(sha=sha, msg=first_line),
                   quote=first_line, link=commit.get("html_url", url), at=_parse_time(date))
         )
     new_cursor = json.dumps({"since": newest or _now_iso(), "checked": _now_iso()})
     return new_cursor, deltas
 
 
-def poll_all(mem: Memory, token: str = "", fetch=None) -> PollReport:
+def poll_all(mem: Memory, token: str = "", fetch=None, lang: str = "hi") -> PollReport:
     """Poll every watched URL, store deltas, advance cursors. Never raises."""
     fetch = fetch or _fetch
     report = PollReport(checked_at=time.time())
@@ -168,9 +175,9 @@ def poll_all(mem: Memory, token: str = "", fetch=None) -> PollReport:
         report.checked += 1
         try:
             if watched.kind == "github_issue":
-                cursor, deltas = poll_github_issue(watched.url, watched.cursor, token, fetch)
+                cursor, deltas = poll_github_issue(watched.url, watched.cursor, token, fetch, lang)
             elif watched.kind == "github_repo":
-                cursor, deltas = poll_github_repo(watched.url, watched.cursor, token, fetch)
+                cursor, deltas = poll_github_repo(watched.url, watched.cursor, token, fetch, lang)
             else:
                 report.errors.append(f"{watched.url}: unsupported kind {watched.kind}")
                 continue
@@ -188,13 +195,14 @@ def poll_all(mem: Memory, token: str = "", fetch=None) -> PollReport:
 
 
 def compose_updates(
-    deltas: list[tuple[WatchedItem, list[Change]]], checked_label: str
+    deltas: list[tuple[WatchedItem, list[Change]]], checked_label: str, s: dict | None = None
 ) -> tuple[str, list[str]]:
     """Spoken delta briefing + screen links (quotes stay on screen too)."""
+    s = s or lang_mod.HI
     total = sum(len(changes) for _, changes in deltas)
     links = [c.source_link for _, changes in deltas for c in changes if c.source_link]
     if total == 0:
-        return "Koi naya badlaav nahi hai.", []
+        return s["updates_none"], []
     firsts = "; ".join(c.summary for _, changes in deltas for c in changes[:3])
-    extra = f" Aur {total - 3} aur." if total > 3 else ""
-    return f"{total} badlaav aaye hain ({checked_label}): {firsts}.{extra}", links
+    extra = s["updates_extra"].format(n=total - 3) if total > 3 else ""
+    return s["updates_some"].format(n=total, label=checked_label, firsts=firsts, extra=extra), links

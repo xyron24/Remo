@@ -34,7 +34,7 @@ class Settings:
     stt_model: str = "prisma-v2.5"
     tts_url: str = "https://api.vachana.ai/api/v1/tts/inference"
     tts_model: str = "timbre-v2.5"
-    tts_voice: str = "Nalini"
+    tts_voice: str = ""  # blank = best voice for the language (see remo.lang)
     language: str = "hi-IN"
 
 

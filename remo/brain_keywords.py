@@ -9,9 +9,15 @@ from __future__ import annotations
 import re
 import unicodedata
 
-SAVE_KEYWORDS = ("yaad rakhna", "remember", "याद रखना")
+SAVE_KEYWORDS = (
+    "yaad rakhna", "remember", "याद रखना",
+    "lakshat thev", "lakshat theva", "लक्षात ठेव", "लक्षात ठेवा",
+)
 
-_FORGET_PREFIXES = ("bhool jao", "bhula do", "forget", "भूल जाओ", "भुला दो")
+_FORGET_PREFIXES = (
+    "bhool jao", "bhula do", "forget", "भूल जाओ", "भुला दो",
+    "visar", "visrun", "विसर", "विसरून",
+)
 
 _UNDO_LAST = frozenset(
     {
@@ -22,15 +28,13 @@ _UNDO_LAST = frozenset(
         "forget last note",
         "भूल जाओ आखिरी वाली बात",
         "आखिरी वाली बात भूल जाओ",
+        "shevatchi goshta visar",
+        "shevatchi goshta visrun ja",
+        "शेवटची गोष्ट विसर",
     }
 )
 
 _SEPARATORS = " :,-–—"
-
-ACK_SAVED_HI = "Yaad kar liya."
-ACK_SAVED_EN = "Noted."
-PROMPT_REPEAT_HI = "Uske baad kya yaad rakhna hai, ek baar phir bolo?"
-CONFIRM_UNDO_HI = "Aakhri wali baat bhula doon?"
 
 
 def normalize(text: str) -> str:

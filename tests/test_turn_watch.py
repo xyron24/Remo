@@ -64,7 +64,7 @@ def test_updates_poll_and_brief_with_links(mem: Memory) -> None:
 
     mem.watch_url("github_issue", "https://github.com/o/r/issues/214")
 
-    def fake_poll_all(mem_inner, token="", fetch=None):
+    def fake_poll_all(mem_inner, token="", fetch=None, lang="hi"):
         watched = mem_inner.list_watched()[0]
         mem_inner.store_changes(watched.id, [
             ("Naya comment aaya.", "LGTM", "https://x/c1", 1.0),
@@ -89,7 +89,7 @@ def test_updates_degrade_honestly_on_errors(mem: Memory) -> None:
 
     mem.watch_url("github_issue", "https://github.com/o/r/issues/214")
 
-    def failing_poll(mem_inner, token="", fetch=None):
+    def failing_poll(mem_inner, token="", fetch=None, lang="hi"):
         return watcher_mod.PollReport(checked=1, errors=["offline"], checked_at=1730000000.0)
 
     with mock.patch.object(watcher_mod, "poll_all", failing_poll):

@@ -22,10 +22,16 @@ _Runs anywhere — backend on macOS, Windows, or Linux; use it from any browser 
   hai?" answers from the log, weeks later.
 - **Change watcher** — "watch karo" a GitHub issue or repo and Remo briefs only what changed since you were last here,
   with links. "Welcome back" merges your pending items, outside changes, and a suggested next step.
+- **Hindi + Marathi, end to end** — every reply, briefing, and confirmation speaks both languages (Timbre voices Nalini
+  and Zahira); "lakshat thev" saves just like "yaad rakhna".
+- **Learns your voice** — vocabulary from your notes boosts recognition, and stubborn mishearings become automatic
+  fixes you can inspect.
+- **Noise benchmark in-repo** — `python scripts/noise_bench.py` scores Prisma on fan/traffic/crowd noise at 16 and
+  8 kHz and writes a WER report + chart.
 
 ## On the way
 
-Telephony-grade noise handling, call-me-back reminders, and a full regional-language experience.
+Live phone-call interface, PDF note imports, and Evon-powered reasoning upgrades.
 
 ## Quickstart
 

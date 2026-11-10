@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 
+from remo import lang as lang_mod
 from remo.brain_keywords import normalize
 from remo.memory import Memory, Note
 
@@ -29,6 +30,10 @@ _LEFT_OFF_MARKERS = (
     "where did i leave off",
     "where was i",
     "kahan chhoda",
+    "kay rahila",
+    "kay baki",
+    "kay shillak",
+    "kay rahila aahe",
 )
 
 _QUESTION_WORDS = (
@@ -49,6 +54,13 @@ _QUESTION_WORDS = (
     "how",
     "batao",
     "sunao",
+    "kay",
+    "kevha",
+    "kon",
+    "kasa",
+    "kashi",
+    "sanga",
+    "sang",
 )
 
 _MAX_READ = 140
@@ -85,22 +97,24 @@ def _short(text: str) -> str:
     return text if len(text) <= _MAX_READ else text[:_MAX_READ].rstrip() + "…"
 
 
-def compose_left_off(notes: list[Note]) -> str:
+def compose_left_off(notes: list[Note], s: dict | None = None) -> str:
     """Pending-first briefing over recent notes."""
+    s = s or lang_mod.HI
     if not notes:
-        return "Abhi maine kuch yaad nahi kiya. 'Yaad rakhna' bolkar shuru karo."
+        return s["left_off_none"]
     pending = [n for n in notes if _PENDING_PAT.search(f"{n.text} {n.text_latin}")]
     if pending:
         items = "; ".join(_short(n.text) for n in pending[:3])
         extra = len(notes) - len(pending)
-        tail = f" Aur {extra} purani baatein yaad hain." if extra > 0 else ""
-        return f"Ye baaki hai: {items}.{tail}"
-    return f"Kuch baaki nahi dikh raha. Aakhri baat thi: {_short(notes[0].text)}."
+        tail = s["left_off_extra"].format(n=extra) if extra > 0 else ""
+        return s["left_off_pending"].format(items=items) + tail
+    return s["left_off_all_done"].format(latest=_short(notes[0].text))
 
 
-def compose_recall(notes: list[Note]) -> str:
+def compose_recall(notes: list[Note], s: dict | None = None) -> str:
     """Read back the best matches, or admit nothing matched."""
+    s = s or lang_mod.HI
     if not notes:
-        return "Is baare mein mujhe kuch yaad nahi hai."
+        return s["recall_none"]
     items = " ".join(_short(n.text) for n in notes[:3])
-    return f"Mujhe ye mila: {items}"
+    return s["recall_found"].format(items=items)

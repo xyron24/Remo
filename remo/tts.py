@@ -11,6 +11,7 @@ from pathlib import Path
 
 import requests
 
+from remo import lang as lang_mod
 from remo.config import Settings, load_settings, require_api_key
 from remo.log import get_logger
 from remo.paths import data_dir
@@ -37,7 +38,19 @@ def synthesize(
     """Speak `text` via Timbre; returns the WAV path (cached copy by default)."""
     settings = settings or load_settings()
     api_key = require_api_key(settings)
-    cached = data_dir() / "tts_cache" / f"{_cache_key(text, settings, speed)}.wav"
+    voice = lang_mod.resolve_voice(settings.tts_voice, settings.language)
+    voice_settings = Settings(
+        gnani_api_key=settings.gnani_api_key,
+        github_token=settings.github_token,
+        stt_url=settings.stt_url,
+        stt_stream_url=settings.stt_stream_url,
+        stt_model=settings.stt_model,
+        tts_url=settings.tts_url,
+        tts_model=settings.tts_model,
+        tts_voice=voice,
+        language=settings.language,
+    )
+    cached = data_dir() / "tts_cache" / f"{_cache_key(text, voice_settings, speed)}.wav"
     if use_cache and cached.exists():
         payload = cached.read_bytes()
     else:
@@ -47,7 +60,7 @@ def synthesize(
                 headers={"X-API-Key-ID": api_key, "Content-Type": "application/json"},
                 json={
                     "text": text,
-                    "voice": settings.tts_voice,
+                    "voice": voice,
                     "model": settings.tts_model,
                     "language": settings.language,
                     "speed": speed,

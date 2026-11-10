@@ -4,7 +4,9 @@ from pathlib import Path
 import pytest
 
 from remo import turn
-from remo.brain_keywords import ACK_SAVED_HI
+from remo.lang import HI as HI_STRINGS
+
+ACK_SAVED_HI = HI_STRINGS["ack_saved"]
 from remo.config import Settings
 from remo.memory import Memory
 

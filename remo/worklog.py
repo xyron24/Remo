@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from remo import lang as lang_mod
 from remo.brain_keywords import normalize
 from remo.memory import Change, Memory, WatchedItem, WorkEntry
 
@@ -165,40 +166,42 @@ def store_update(mem: Memory, text: str, persona: str | None = None) -> WorkEntr
     return mem.update_work_entry(existing.id, merged_done, merged_pending)
 
 
-def _label(entry: WorkEntry) -> str:
+def _label(entry: WorkEntry, s: dict) -> str:
     bits = [b for b in (entry.org, f"issue {entry.issue_ref}" if entry.issue_ref else "") if b]
-    return " ".join(bits) if bits else "ye kaam"
+    return " ".join(bits) if bits else s["entry_fallback"]
 
 
-def compose_entry(entry: WorkEntry) -> str:
+def compose_entry(entry: WorkEntry, s: dict | None = None) -> str:
     """Pending-first briefing for one work entry."""
-    label = _label(entry)
+    s = s or lang_mod.HI
+    label = _label(entry, s)
     if not entry.pending and not entry.done:
-        return f"{label} mein abhi kuch darj nahi hai."
+        return s["entry_none"].format(label=label)
     parts = []
     if entry.pending:
-        parts.append(f"{label} mein ye baaki hai: {'; '.join(entry.pending[:4])}.")
+        parts.append(s["entry_pending"].format(label=label, items="; ".join(entry.pending[:4])))
     if entry.done:
-        parts.append(f"Ho gaya: {'; '.join(entry.done[:4])}.")
+        parts.append(s["entry_done"].format(items="; ".join(entry.done[:4])))
     return " ".join(parts)
 
 
 def compose_welcome_back(
-    entries: list[WorkEntry], deltas: list[tuple[WatchedItem, list[Change]]]
+    entries: list[WorkEntry], deltas: list[tuple[WatchedItem, list[Change]]], s: dict | None = None
 ) -> tuple[str, list[str]]:
     """Your pending items + the world's changes + a suggested next step."""
+    s = s or lang_mod.HI
     pending_all: list[str] = [p for entry in entries for p in entry.pending[:3]]
     total_changes = sum(len(changes) for _, changes in deltas)
     links = [c.source_link for _, changes in deltas for c in changes if c.source_link]
 
     if not pending_all and total_changes == 0:
-        return "Welcome back! Kuch baaki nahi hai aur bahar bhi koi badlaav nahi.", []
-    parts = ["Welcome back!"]
+        return s["welcome_none"], []
+    parts = [s["welcome_head"]]
     if pending_all:
-        parts.append(f"Aapke {len(pending_all)} kaam baaki hain: {'; '.join(pending_all[:4])}.")
+        parts.append(s["welcome_pending"].format(n=len(pending_all), items="; ".join(pending_all[:4])))
     if total_changes:
         firsts = "; ".join(c.summary for _, changes in deltas for c in changes[:2])
-        parts.append(f"Bahar {total_changes} badlaav aaye hain: {firsts}.")
+        parts.append(s["welcome_deltas"].format(n=total_changes, items=firsts))
     if pending_all:
-        parts.append(f"Pehle ye karo: {pending_all[0]}.")
+        parts.append(s["welcome_next"].format(item=pending_all[0]))
     return " ".join(parts), links

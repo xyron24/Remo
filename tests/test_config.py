@@ -12,6 +12,7 @@ def test_defaults_match_challenge_stack() -> None:
     settings = load_settings(env_path=Path("definitely-not-a-real-env-file"))
     assert settings.stt_model == "prisma-v2.5"
     assert settings.tts_model == "timbre-v2.5"
+    assert settings.tts_voice == ""  # resolved per language by remo.lang
     assert settings.language == "hi-IN"
     assert settings.stt_url == "https://api.vachana.ai/stt/v3"
 

@@ -1,8 +1,9 @@
 """One voice turn: transcript in, spoken reply out.
 
 Routes through the keyword gate first (auto-save), then undo/forget guards,
-then left-off and recall answering. Stateless: confirmations travel back as a
-`pending` payload the caller holds and resolves with `confirm_pending`.
+then reminders, plan, quiz, watching, and recall answering. Stateless:
+confirmations travel back as a `pending` payload the caller holds and resolves.
+Every reply renders in the locale from settings (Hindi/Marathi).
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from remo import recall as recall_mod
 from remo.answers import parse_yes_no
 from remo import briefing as briefing_mod
 from remo.config import Settings, load_settings
+from remo import lang as lang_mod
 from remo.log import get_logger
 from remo.memory import Memory
 from remo import quiz as quiz_mod
@@ -27,31 +29,14 @@ from remo import worklog as worklog_mod
 
 log = get_logger("turn")
 
-HELP = (
-    "Kuch yaad karwane ke liye 'yaad rakhna' se shuru karo. "
-    "Puchhne ke liye bas bol do, jaise 'kya bacha hai?'"
-)
-NOTHING_NAMED = "Is naam se kuch yaad nahi hai."
-UNDONE = "Bhula diya."
-KEPT = "Rehne diya, yaad rahega."
-ASK_WHEN = "Kab yaad dilaun? Waqt samajh nahi aaya."
-ASK_TASK = "Kis liye yaad dilaun?"
-ASK_YES_NO = "Haan ya nahi?"
-REMINDERS_OFF = "Theek hai, reminder nahi lagaya."
+_REMIND_MARKERS = ("yaad dilana", "yaad dila", "remind me", "reminder lagao", "reminder", "aathvan")
 
-_REMIND_MARKERS = ("yaad dilana", "yaad dila", "remind me", "reminder lagao", "reminder")
-
-_WATCH_MARKERS = ("watch karo", "track karo", "nazar rakho", "watch this")
+_WATCH_MARKERS = ("watch karo", "track karo", "nazar rakho", "watch this", "laksh thev")
 
 _UPDATE_MARKERS = ("koi update", "update aaya", "update aaye", "check update", "naya kya hai", "what changed",
-                   "what's new", "koi badlaav")
+                   "what's new", "koi badlaav", "kahi update", "kay badal")
 
 _WELCOME_MARKERS = ("welcome back", "vapas aaya", "wapas aaya", "wapis aaya", "vapas aa gaya", "main vapas")
-
-WORK_ACK = "Yaad kar liya, kaam ki list mein jod diya."
-NO_WORK_RECORD = "Is kaam ka koi record nahi mila."
-NOTHING_WATCHED = "Abhi kuch watch nahi kar raha. 'Watch karo' ke baad link bolo."
-BAD_WATCH_URL = "Ye link samajh nahi aaya. GitHub issue ya repo ka link bolo."
 
 
 @dataclass
@@ -83,28 +68,29 @@ def _speak(
 def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, speak: bool = True) -> TurnResult:
     """Run one transcript through save/recall/forget routing + voice-out."""
     settings = settings or load_settings()
+    s = lang_mod.strings(settings.language)
 
     content = kw.match_save_keyword(text)
     if content is not None:
         reason = kw.check_content(content)
         if reason:
-            return _speak(kw.PROMPT_REPEAT_HI, "repeat", settings, speak)
+            return _speak(s["prompt_repeat"], "repeat", settings, speak)
         mem.add_note(content)
         if worklog_mod.is_work_update(content):
             worklog_mod.store_update(mem, content)
-            return _speak(WORK_ACK, "saved", settings, speak)
-        return _speak(kw.ACK_SAVED_HI, "saved", settings, speak)
+            return _speak(s["ack_saved_work"], "saved", settings, speak)
+        return _speak(s["ack_saved"], "saved", settings, speak)
 
     if kw.is_undo_last(text):
-        return _speak(kw.CONFIRM_UNDO_HI, "undo_ask", settings, speak, pending={"action": "undo"})
+        return _speak(s["confirm_undo"], "undo_ask", settings, speak, pending={"action": "undo"})
 
     target = kw.match_forget(text)
     if target is not None:
         hits = recall_mod.hybrid_search(mem, target, limit=3)
         if not hits:
-            return _speak(NOTHING_NAMED, "recall", settings, speak)
+            return _speak(s["nothing_named"], "recall", settings, speak)
         return _speak(
-            f"'{hits[0].text}' — bhula doon?",
+            s["forget_ask"].format(text=hits[0].text),
             "forget_ask",
             settings,
             speak,
@@ -112,10 +98,10 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
         )
 
     if _is_remind_request(text):
-        return _remind_turn(text, mem=mem, settings=settings, speak=speak)
+        return _remind_turn(text, mem=mem, settings=settings, speak=speak, s=s)
 
     if briefing_mod.is_plan_query(text):
-        return _speak(briefing_mod.compose_plan(mem), "plan", settings, speak)
+        return _speak(briefing_mod.compose_plan(mem, s=s), "plan", settings, speak)
 
     if quiz_mod.is_quiz_request(text):
         topic = _quiz_topic(text)
@@ -125,14 +111,14 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
 
     norm = kw.normalize(text)
     if any(marker in norm for marker in _WATCH_MARKERS):
-        return _watch_turn(text, mem=mem, settings=settings, speak=speak)
+        return _watch_turn(text, mem=mem, settings=settings, speak=speak, s=s)
 
     if any(marker in norm for marker in _UPDATE_MARKERS):
         return check_updates(mem=mem, settings=settings, speak=speak)
 
     if any(marker in norm for marker in _WELCOME_MARKERS):
         deltas = mem.unbriefed_changes()
-        say, links = worklog_mod.compose_welcome_back(mem.list_work_entries(limit=10), deltas)
+        say, links = worklog_mod.compose_welcome_back(mem.list_work_entries(limit=10), deltas, s=s)
         _mark_deltas_briefed(mem, deltas)
         return _speak(say, "welcome", settings, speak, links=links)
 
@@ -141,15 +127,15 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
         if org or ref:
             entry = mem.find_work_entry(org, ref)
             if entry is None:
-                return _speak(NO_WORK_RECORD, "left_off", settings, speak)
-            return _speak(worklog_mod.compose_entry(entry), "left_off", settings, speak)
-        say = recall_mod.compose_left_off(mem.list_recent(20))
+                return _speak(s["no_work_record"], "left_off", settings, speak)
+            return _speak(worklog_mod.compose_entry(entry, s=s), "left_off", settings, speak)
+        say = recall_mod.compose_left_off(mem.list_recent(20), s=s)
         return _speak(say, "left_off", settings, speak)
 
     hits = recall_mod.hybrid_search(mem, text, limit=3)
     if recall_mod.is_recall_query(text) or hits:
-        return _speak(recall_mod.compose_recall(hits), "recall", settings, speak)
-    return _speak(HELP, "help", settings, speak)
+        return _speak(recall_mod.compose_recall(hits, s=s), "recall", settings, speak)
+    return _speak(s["help"], "help", settings, speak)
 
 
 def _is_remind_request(text: str) -> bool:
@@ -167,16 +153,17 @@ def _quiz_topic(text: str) -> str | None:
     return None
 
 
-def _remind_turn(text: str, *, mem: Memory, settings: Settings, speak: bool) -> TurnResult:
+def _remind_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: dict) -> TurnResult:
     task, moment = reminders_mod.split_task_time(text, datetime.now())
     if moment is None:
-        return _speak(ASK_WHEN, "help", settings, speak)
+        return _speak(s["ask_when"], "help", settings, speak)
     if not task:
         pending = {"action": "remind_ask", "fire_at": moment.timestamp()}
-        return _speak(ASK_TASK, "remind_ask", settings, speak, pending=pending)
+        return _speak(s["ask_task"], "remind_ask", settings, speak, pending=pending)
     readback = reminders_mod.format_readback(moment, datetime.now())
     pending = {"action": "remind", "text": task, "fire_at": moment.timestamp()}
-    return _speak(f"{readback}: {task}. Pakka?", "remind_confirm", settings, speak, pending=pending)
+    return _speak(s["remind_confirm"].format(readback=readback, task=task), "remind_confirm",
+                  settings, speak, pending=pending)
 
 
 def complete_remind_task(
@@ -184,23 +171,24 @@ def complete_remind_task(
 ) -> TurnResult:
     """Arm a reminder whose task arrived one turn after its time."""
     settings = settings or load_settings()
+    s = lang_mod.strings(settings.language)
     task = kw.normalize(text).strip(" .,!?;:")
     if not task:
-        return _speak(ASK_TASK, "remind_ask", settings, speak, pending=pending)
+        return _speak(s["ask_task"], "remind_ask", settings, speak, pending=pending)
     fire_at = float((pending or {}).get("fire_at", 0))
     mem.add_reminder(text.strip(), fire_at)
     readback = reminders_mod.format_readback(datetime.fromtimestamp(fire_at), datetime.now())
-    return _speak(f"Ho gaya: {readback} — {text.strip()}.", "reminded", settings, speak)
+    return _speak(s["remind_armed"].format(readback=readback, task=text.strip()), "reminded", settings, speak)
 
 
-def _watch_turn(text: str, *, mem: Memory, settings: Settings, speak: bool) -> TurnResult:
+def _watch_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: dict) -> TurnResult:
     match = re.search(r"https?://\S+", text)
     url = match.group(0).rstrip(".,!?:;") if match else ""
     kind = watcher_mod.kind_for_url(url) if url else None
     if not kind:
-        return _speak(BAD_WATCH_URL, "help", settings, speak)
+        return _speak(s["bad_watch_url"], "help", settings, speak)
     mem.watch_url(kind, url)
-    return _speak("Ho gaya, is par nazar rakhunga. 'Koi update' bolkar haal pucho.", "watching", settings, speak)
+    return _speak(s["watching_ok"], "watching", settings, speak)
 
 
 def _mark_deltas_briefed(mem: Memory, deltas) -> None:
@@ -216,16 +204,18 @@ def check_updates(
 ) -> TurnResult:
     """Poll watched sources now, then brief only what is new."""
     settings = settings or load_settings()
+    s = lang_mod.strings(settings.language)
     if not mem.list_watched():
-        return _speak(NOTHING_WATCHED, "help", settings, speak)
-    report = watcher_mod.poll_all(mem, token=settings.github_token, fetch=fetch)
+        return _speak(s["nothing_watched"], "help", settings, speak)
+    report = watcher_mod.poll_all(mem, token=settings.github_token, fetch=fetch,
+                                  lang=lang_mod.lang_key(settings.language))
     deltas = mem.unbriefed_changes()
     label = datetime.fromtimestamp(report.checked_at).strftime("%I:%M %p").lstrip("0")
-    say, links = watcher_mod.compose_updates(deltas, f"as of {label}")
+    say, links = watcher_mod.compose_updates(deltas, f"as of {label}", s=s)
     if report.errors and not deltas:
-        say = "Source se sampark nahi ho paya, isliye sirf yaad se bata raha hoon. " + say
+        say = s["updates_offline_alone"] + say
     elif report.errors:
-        say += " Kuch sources se sampark nahi hua."
+        say += s["updates_offline_partial"]
     _mark_deltas_briefed(mem, deltas)
     return _speak(say, "updates", settings, speak, links=links)
 
@@ -235,9 +225,10 @@ def answer_quiz(
 ) -> TurnResult:
     """Score one quiz answer carried in a pending quiz session."""
     settings = settings or load_settings()
+    s = lang_mod.strings(settings.language)
     session = quiz_mod.QuizSession.from_dict((pending or {}).get("session", {}))
     if not session.note_ids:
-        return _speak(HELP, "help", settings, speak)
+        return _speak(s["help"], "help", settings, speak)
     session, say, done = quiz_mod.answer_question(mem, session, text)
     next_pending = None if done else {"action": "quiz", "session": session.to_dict()}
     return _speak(say, "quiz_done" if done else "quiz_ask", settings, speak, pending=next_pending)
@@ -248,28 +239,29 @@ def confirm_pending(
 ) -> TurnResult:
     """Resolve an undo/forget/remind confirmation carried from a previous turn."""
     settings = settings or load_settings()
+    s = lang_mod.strings(settings.language)
     action = (pending or {}).get("action")
     if not yes:
-        say = REMINDERS_OFF if action == "remind" else KEPT
+        say = s["reminders_off"] if action == "remind" else s["kept"]
         return _speak(say, "kept", settings, speak)
     if action == "undo":
         forgotten = mem.forget_last_note()
-        say = UNDONE if forgotten else NOTHING_NAMED
+        say = s["undone"] if forgotten else s["nothing_named"]
         return _speak(say, "undone", settings, speak)
     if action == "forget":
         ok = mem.forget_note(int((pending or {}).get("note_id", -1)))
-        return _speak(UNDONE if ok else NOTHING_NAMED, "forgot", settings, speak)
+        return _speak(s["undone"] if ok else s["nothing_named"], "forgot", settings, speak)
     if action == "remind":
         data = pending or {}
         mem.add_reminder(str(data.get("text", "")), float(data.get("fire_at", 0)))
-        return _speak("Ho gaya, waqt par yaad dila dunga.", "reminded", settings, speak)
-    return _speak(HELP, "help", settings, speak)
+        return _speak(s["remind_done"], "reminded", settings, speak)
+    return _speak(s["help"], "help", settings, speak)
 
 
 def confirm_pending_text(
     mem: Memory, pending: dict | None, text: str, *, settings: Settings | None = None, speak: bool = True
 ) -> TurnResult | None:
-    """Spoken yes/no over a pending confirm; None means ask "Haan ya nahi?" again."""
+    """Spoken yes/no over a pending confirm; None means ask again."""
     settings = settings or load_settings()
     verdict = parse_yes_no(text)
     if verdict is None:

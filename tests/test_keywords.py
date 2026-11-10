@@ -18,6 +18,8 @@ from remo.brain_keywords import (
         ("remember the meeting is at 5", "the meeting is at 5"),
         ("Remember, issue 214 docs are pending", "issue 214 docs are pending"),
         ("याद रखना गणित में काम बाकी है", "गणित में काम बाकी है"),
+        ("lakshat thev, ganitat kaam baki aahe", "ganitat kaam baki aahe"),
+        ("लक्षात ठेव गणितात काम बाकी आहे", "गणितात काम बाकी आहे"),
     ],
 )
 def test_save_keyword_returns_original_case_content(said: str, expected: str) -> None:
@@ -59,6 +61,7 @@ def test_content_gate(content: str, verdict: str | None) -> None:
         "Last Wali Baat Bhool Jao",
         "forget last",
         "forget the last one",
+        "shevatchi goshta visar",
         "आखिरी वाली बात भूल जाओ",
     ],
 )
@@ -71,6 +74,7 @@ def test_undo_last_patterns(said: str) -> None:
     [
         ("bhool jao maths wali baat", "maths wali baat"),
         ("Forget Issue 214 notes", "Issue 214 notes"),
+        ("visar kalchi goshta", "kalchi goshta"),
         ("भूल जाओ कल वाली बात", "कल वाली बात"),
     ],
 )

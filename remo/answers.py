@@ -11,7 +11,8 @@ YES_WORDS = frozenset(
     {
         "haan", "han", "ha", "haanji", "hanji", "ji",
         "yes", "yeah", "yep", "yup", "ok", "okay", "sure", "done", "pakka",
-        "हाँ", "हां", "हान", "हा", "जी", "हाँजी",
+        "hoy",
+        "हाँ", "हां", "हान", "हा", "जी", "हाँजी", "होय",
     }
 )
 
@@ -34,6 +35,8 @@ def parse_yes_no(text: str) -> bool | None:
     norm = normalize(text)
     if norm in ("na", "ना"):  # bare "na" is no; mid-sentence "na" is a softener
         return False
+    if norm in ("ho", "हो"):  # bare Marathi "ho" is yes; "ho" inside Hindi verbs is not
+        return True
     if any(phrase in norm for phrase in UNCLEAR_PHRASES):
         return None
     words = set(norm.split())
