@@ -105,7 +105,10 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
         return _remind_turn(text, mem=mem, settings=settings, speak=speak, s=s)
 
     if briefing_mod.is_plan_query(text):
-        return _speak(briefing_mod.compose_plan(mem, s=s), "plan", settings, speak)
+        day = briefing_mod.plan_day(text)
+        if day is None:
+            return _speak(briefing_mod.compose_plan(mem, s=s), "plan", settings, speak)
+        return _speak(briefing_mod.compose_day_plan(mem, day, s=s), "plan", settings, speak)
 
     if quiz_mod.is_quiz_request(text):
         topic = _quiz_topic(text)
@@ -125,6 +128,10 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
         say, links = worklog_mod.compose_welcome_back(mem.list_work_entries(limit=10), deltas, s=s)
         _mark_deltas_briefed(mem, deltas)
         return _speak(say, "welcome", settings, speak, links=links)
+
+    day_plan = briefing_mod.wants_day_plan(text)
+    if day_plan is not None:
+        return _speak(briefing_mod.compose_day_plan(mem, day_plan, s=s), "plan", settings, speak)
 
     if recall_mod.is_left_off_query(text):
         org, ref = worklog_mod.detect_refs(text)

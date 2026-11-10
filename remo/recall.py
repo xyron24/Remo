@@ -14,8 +14,8 @@ from remo.brain_keywords import normalize
 from remo.memory import Memory, Note
 
 _PENDING_PAT = re.compile(
-    r"baaki|baki|bacha|bache|left|pending|reh gay|karna hai|to[\s-]?do|adhur"
-    r"|बाकी|बकि|बचा|बचे|करना|करनी|अधूर|रह ग|राहिल|करायच",
+    r"baaki|baki|bacha|bache|left|pending|reh gay|karna hai|karne|to[\s-]?do|adhur"
+    r"|बाकी|बकि|बचा|बचे|करना|करनी|करने|अधूर|रह ग|राहिल|करायच",
     re.IGNORECASE,
 )
 

@@ -30,6 +30,53 @@ def test_plan_queries(said: str) -> None:
     assert B.is_plan_query(said) is True
 
 
+@pytest.mark.parametrize("said", ["kal ka plan kya hai", "tomorrow's plan?", "कल का प्लान क्या है"])
+def test_tomorrow_plan_queries(said: str) -> None:
+    assert B.is_plan_query(said) is True
+    assert B.plan_day(said) == "tomorrow"
+
+
+@pytest.mark.parametrize("said", ["aaj ka plan batao", "today's plan", "mera plan batao"])
+def test_today_and_bare_plan_have_no_day(said: str) -> None:
+    assert B.is_plan_query(said) is True
+    assert B.plan_day(said) is None
+
+
+def test_tomorrow_plan_lists_every_item_directly(tmp_path: Path) -> None:
+    mem = Memory(tmp_path / "remo.db")
+    mem.add_note("kal kirana se atta aur dal lena hai")
+    mem.add_note("मुझे कल घर की सफाई करनी है।")
+    mem.add_note("live server check ho gaya")
+    say = B.compose_day_plan(mem, "tomorrow")
+    assert "Kal ke liye 2 kaam hain" in say
+    assert "atta" in say and "सफाई" in say
+    assert "live server" not in say
+    assert "Aapne kaha tha" not in say and "Mujhe ye mila" not in say
+    mem.close()
+
+
+def test_tomorrow_plan_empty_state(tmp_path: Path) -> None:
+    mem = Memory(tmp_path / "remo.db")
+    mem.add_note("live server check ho gaya")
+    assert "khaas nahi" in B.compose_day_plan(mem, "tomorrow")
+    mem.close()
+
+
+@pytest.mark.parametrize(
+    ("said", "day"),
+    [
+        ("kal kya bacha hai?", "tomorrow"),
+        ("kal kya karna hai mujhe", "tomorrow"),
+        ("parso ka kya scene hai", "dayafter"),
+        ("differential ka kya haal hai?", None),
+        ("kal kya kaha tha?", None),
+        ("kal kya hua tha?", None),
+    ],
+)
+def test_day_plan_routing(said: str, day: str | None) -> None:
+    assert B.wants_day_plan(said) == day
+
+
 def test_daily_schedule_setting(tmp_path: Path) -> None:
     mem = Memory(tmp_path / "remo.db")
     assert B.get_daily_plan_at(mem) == ""

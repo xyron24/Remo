@@ -88,3 +88,23 @@ def test_boost_words_and_fix_rules(tmp_path: Path) -> None:
     mem.add_fix_rule("विवाह", "viva")
     assert mem.get_fix_rules() == [("विवाह", "viva")]
     mem.close()
+
+
+def test_delete_work_entry(tmp_path: Path) -> None:
+    mem = Memory(tmp_path / "remo.db")
+    entry = mem.upsert_work_entry("student", "Mifos", "214", [], ["docs"])
+    assert mem.delete_work_entry(entry.id) is True
+    assert mem.delete_work_entry(entry.id) is False
+    assert mem.list_work_entries() == []
+    mem.close()
+
+
+def test_unwatch_removes_item_and_changes(tmp_path: Path) -> None:
+    mem = Memory(tmp_path / "remo.db")
+    watched = mem.watch_url("github_issue", "https://github.com/o/r/issues/1")
+    mem.store_changes(watched.id, [("Naya comment.", "q", "https://x/1", 1.0)])
+    assert mem.unwatch(watched.id) is True
+    assert mem.unwatch(watched.id) is False
+    assert mem.list_watched() == []
+    assert mem.recent_changes() == []
+    mem.close()

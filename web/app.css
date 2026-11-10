@@ -77,18 +77,6 @@ h3.sect { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em;
   align-items: center;
   gap: 0.4rem;
 }
-.ver-tag {
-  font-family: var(--mono);
-  font-size: 0.64rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--accent);
-  background: var(--accent-dim);
-  border: 1px solid rgba(30, 86, 63, 0.24);
-  border-radius: 999px;
-  padding: 0.08rem 0.44rem;
-}
 .side-brand-text span { font-size: 0.74rem; color: var(--muted); }
 
 .icon-btn {
@@ -574,6 +562,18 @@ button[type="submit"]:active, .primary:active { transform: translateY(1px); box-
   padding: 0.68rem 0.95rem; font-size: 0.92rem;
 }
 .activity .meta, .rows .meta { display: block; font-family: var(--mono); font-size: 0.73rem; color: var(--muted); margin-top: 0.2rem; }
+.deletable { position: relative; }
+li.deletable { padding-right: 2.6rem; }
+.del-btn {
+  position: absolute; top: 0.45rem; right: 0.45rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.7rem; height: 1.7rem; border-radius: 0.5rem;
+  border: 1px solid transparent; background: transparent;
+  color: var(--muted); cursor: pointer;
+}
+.del-btn svg { width: 0.95rem; height: 0.95rem; }
+.del-btn:hover { color: #ff8f8f; border-color: var(--border-soft); background: var(--surface-2); }
+.del-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .empty { color: var(--muted); font-style: italic; background: none !important; border-style: dashed !important; }
 .skel { border-radius: var(--radius-sm); background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2)); min-height: 3rem; animation: shimmer 1.4s infinite; }
 @keyframes shimmer { 50% { opacity: 0.6; } }

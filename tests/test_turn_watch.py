@@ -103,5 +103,5 @@ def test_welcome_back_combines_pending_and_deltas(mem: Memory) -> None:
     mem.store_changes(watched.id, [("Naya comment.", "q", "https://x/1", 1.0)])
     result = _run("welcome back", mem)
     assert result.action == "welcome"
-    assert "docs" in result.text and "Naya comment" in result.text and "Pehle ye karo" in result.text
+    assert "docs" in result.text and "Naya comment" in result.text and "Pehle ye karo" not in result.text
     assert result.links == ["https://x/1"]

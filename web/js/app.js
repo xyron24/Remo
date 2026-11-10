@@ -427,6 +427,36 @@
     renderLearned(s);
   }
 
+  async function removeItem(kind, id, label) {
+    if (!window.confirm(`Delete this ${label}? This cannot be undone.`)) return;
+    try {
+      await API.remove(kind, id);
+      toast("Deleted");
+    } catch (err) {
+      if (err.status === 404 && /no such/.test(err.message)) {
+        toast("That item is already gone");
+      } else if (err.status === 404) {
+        toast("Delete needs a server restart: stop uvicorn (Ctrl+C) and start it again", true);
+        return;
+      } else {
+        toast(`Delete failed: ${err.message}`, true);
+        return;
+      }
+    }
+    refresh();
+  }
+
+  function delButton(kind, id, label) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "del-btn";
+    b.title = `Delete this ${label}`;
+    b.setAttribute("aria-label", `Delete this ${label}`);
+    b.innerHTML = `<svg><use href="#i-x"/></svg>`;
+    b.onclick = (e) => { e.stopPropagation(); removeItem(kind, id, label); };
+    return b;
+  }
+
   function renderMemories(s) {
     const q = ($("mem-search").value || "").toLowerCase();
     const list = $("mem-list");
@@ -434,7 +464,9 @@
     list.innerHTML = hits.length ? "" : `<li class="empty">${s.notes.length ? "No matches." : "No memories yet. Say: yaad rakhna ..."}</li>`;
     hits.slice(0, 60).forEach((n) => {
       const li = document.createElement("li");
+      li.className = "deletable";
       li.innerHTML = `${esc(n.text)}<span class="meta">${esc(fmtTime(n.created_at))} · ${esc(n.source || "voice")}</span>`;
+      li.appendChild(delButton("notes", n.id, "memory"));
       list.appendChild(li);
     });
   }
@@ -447,12 +479,13 @@
       const total = w.done.length + w.pending.length;
       const pct = total ? Math.round((w.done.length / total) * 100) : 0;
       const div = document.createElement("div");
-      div.className = "panel";
+      div.className = "panel deletable";
       const pend = w.pending.map((p) => `<li class="pend-item">${esc(p)}</li>`).join("") || `<li class="empty">Nothing pending.</li>`;
       const done = w.done.map((d) => `<li class="done-item">${esc(d)}</li>`).join("") || `<li class="empty">Nothing done yet.</li>`;
       div.innerHTML = `<h3>${esc(label)} <span class="persona-pill">${esc(w.persona)} · ${w.done.length}/${total} done</span></h3>
         <div class="work-progress" aria-hidden="true"><i style="width:${pct}%"></i></div>
         <ul class="rows">${pend}</ul><ul class="rows" style="margin-top:.55rem">${done}</ul>`;
+      div.appendChild(delButton("work", w.id, "work entry"));
       box.appendChild(div);
     });
   }
@@ -462,13 +495,17 @@
     up.innerHTML = s.reminders.length ? "" : `<li class="empty">None armed.</li>`;
     s.reminders.forEach((r) => {
       const li = document.createElement("li");
+      li.className = "deletable";
       li.innerHTML = `${esc(r.text)}<span class="meta">${esc(r.when)}</span>`;
+      li.appendChild(delButton("reminders", r.id, "reminder"));
       up.appendChild(li);
     });
     done.innerHTML = s.reminders_fired.length ? "" : `<li class="empty">None completed yet.</li>`;
     s.reminders_fired.slice(0, 20).forEach((r) => {
       const li = document.createElement("li");
+      li.className = "deletable";
       li.innerHTML = `${esc(r.text)}<span class="meta">fired ${esc(r.when)}</span>`;
+      li.appendChild(delButton("reminders", r.id, "reminder"));
       done.appendChild(li);
     });
   }
@@ -479,13 +516,14 @@
     s.watched.forEach((w) => {
       const fresh = s.changes.filter((c) => c.watch_url === w.url).slice(0, 4);
       const div = document.createElement("div");
-      div.className = "panel";
+      div.className = "panel deletable";
       div.innerHTML = `<h3><a href="${esc(w.url)}" target="_blank" rel="noopener">${esc(shortUrl(w.url))}</a>
         ${fresh.some((c) => !c.briefed) ? `<span class="pill-new">new</span>` : ""}</h3>
         <p class="muted small">Last checked: ${w.checked_at ? esc(fmtTime(w.checked_at)) : "never"}</p>
         <ul class="rows">${fresh.length ? fresh.map((c) =>
           `<li>${esc(c.summary)}<span class="meta"><a href="${esc(c.link)}" target="_blank" rel="noopener">open source ↗</a></span></li>`
         ).join("") : `<li class="empty">No changes recorded yet.</li>`}</ul>`;
+      div.appendChild(delButton("watch", w.id, "watched item"));
       box.appendChild(div);
     });
   }

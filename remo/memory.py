@@ -124,7 +124,7 @@ def transliterate_latin(text: str) -> str:
 # can never match a note by themselves. Content words stay, in every language.
 _STOPWORDS = frozenset(
     """
-    mujhe mujhko mujhse main mein mene maine hum hamari hamare tum tumhe tumhara
+    mujhe mujhko mujhse main mein mene maine mera mere meri hum hamari hamare tum tumhe tumhara
     aap aapko ye yeh is iss us uss woh wo vo ka ke ki ko se par per tak ne bhi
     bhee hi hee toh to aur ya lekin hai hain tha thi the ho hoga hogi hoge honge
     hua hui hue hona hone hota hoti hote hu hun hoon raha rahi rahe kya kab kaun
@@ -503,6 +503,11 @@ class Memory:
         existing.done, existing.pending, existing.updated_at = merged_done, merged_pending, now
         return existing
 
+    def delete_work_entry(self, entry_id: int) -> bool:
+        cur = self.db.execute("DELETE FROM work_entries WHERE id = ?", (entry_id,))
+        self.db.commit()
+        return cur.rowcount > 0
+
     def update_work_entry(self, entry_id: int, done: list[str], pending: list[str]) -> WorkEntry:
         now = time.time()
         self.db.execute(
@@ -543,6 +548,12 @@ class Memory:
 
     def list_watched(self) -> list[WatchedItem]:
         return [self._watched_from(r) for r in self.db.execute("SELECT * FROM watched_items").fetchall()]
+
+    def unwatch(self, watched_id: int) -> bool:
+        self.db.execute("DELETE FROM changes WHERE watched_id = ?", (watched_id,))
+        cur = self.db.execute("DELETE FROM watched_items WHERE id = ?", (watched_id,))
+        self.db.commit()
+        return cur.rowcount > 0
 
     def update_cursor(self, watched_id: int, cursor: str, checked_at: float) -> None:
         self.db.execute(

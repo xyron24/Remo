@@ -88,6 +88,27 @@ def test_devanagari_remember_saves_end_to_end(mem: Memory) -> None:
     assert "नये प्रोजेक्ट" in mem.list_recent(1)[0].text
 
 
+def test_tomorrow_plan_answers_directly(mem: Memory) -> None:
+    _run("yaad rakhna kal kirana se atta aur dal lena hai", mem)
+    _run("yaad rakhna mujhe kal ghar ki safai karni hai", mem)
+    result = _run("kal ka plan kya hai", mem)
+    assert result.action == "plan"
+    assert "Kal ke liye 2 kaam hain" in result.text
+    assert "atta" in result.text and "safai" in result.text
+    assert "Aapne kaha tha" not in result.text
+
+
+def test_tomorrow_left_off_lists_day_directly(mem: Memory) -> None:
+    _run("yaad rakhna mujhe kal 2 PR merge karne hain", mem)
+    _run("yaad rakhna kal kirana se atta aur dal lena hai", mem)
+    result = _run("kal kya bacha hai?", mem)
+    assert result.action == "plan"
+    assert "Kal ke liye 2 kaam hain" in result.text
+    assert "Aapne kaha tha" not in result.text and "Mujhe ye mila" not in result.text
+    past = _run("kal kya kaha tha?", mem)
+    assert past.action == "recall"
+
+
 def test_recall_answers_each_question_from_its_own_note(mem: Memory) -> None:
     _run("yaad rakhna live server check ho gaya", mem)
     _run("yaad rakhna differential equations baaki hai", mem)

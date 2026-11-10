@@ -62,7 +62,18 @@ def test_welcome_back_merges_pending_and_deltas(tmp_path: Path) -> None:
     mem.store_changes(watched.id, [("Naya comment aaya.", "LGTM", "https://x/y#c1", 1.0)])
     say, links = W.compose_welcome_back(mem.list_work_entries(), mem.unbriefed_changes())
     assert "Welcome back" in say and "docs" in say and "Naya comment" in say
-    assert "Pehle ye karo" in say and links == ["https://x/y#c1"]
+    assert "Pehle ye karo" not in say and links == ["https://x/y#c1"]
+    mem.close()
+
+
+def test_welcome_back_next_step_only_when_choices(tmp_path: Path) -> None:
+    mem = Memory(tmp_path / "remo.db")
+    mem.upsert_work_entry("student", "Mifos", "214", [], ["docs baaki hai", "tests baaki hai"])
+    watched = mem.watch_url("github_issue", "https://github.com/o/r/issues/214")
+    mem.store_changes(watched.id, [("Naya comment aaya.", "LGTM", "https://x/y#c1", 1.0)])
+    say, _ = W.compose_welcome_back(mem.list_work_entries(), mem.unbriefed_changes())
+    assert "Pehle ye karo: docs baaki hai" in say
+    assert say.count("docs baaki hai") == 2  # listed once, prioritized once
     mem.close()
 
 

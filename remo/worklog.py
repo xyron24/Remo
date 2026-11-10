@@ -202,6 +202,6 @@ def compose_welcome_back(
     if total_changes:
         firsts = "; ".join(c.summary for _, changes in deltas for c in changes[:2])
         parts.append(s["welcome_deltas"].format(n=total_changes, items=firsts))
-    if pending_all:
+    if len(pending_all) > 1:
         parts.append(s["welcome_next"].format(item=pending_all[0]))
     return " ".join(parts), links

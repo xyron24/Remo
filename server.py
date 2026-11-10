@@ -253,6 +253,34 @@ def state(mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
     })
 
 
+@app.delete("/api/notes/{note_id}")
+def delete_note(note_id: int, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
+    if not mem.forget_note(note_id):
+        raise HTTPException(status_code=404, detail="no such note")
+    return JSONResponse({"deleted": True})
+
+
+@app.delete("/api/reminders/{reminder_id}")
+def delete_reminder(reminder_id: int, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
+    if not mem.delete_reminder(reminder_id):
+        raise HTTPException(status_code=404, detail="no such reminder")
+    return JSONResponse({"deleted": True})
+
+
+@app.delete("/api/work/{entry_id}")
+def delete_work(entry_id: int, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
+    if not mem.delete_work_entry(entry_id):
+        raise HTTPException(status_code=404, detail="no such work entry")
+    return JSONResponse({"deleted": True})
+
+
+@app.delete("/api/watch/{watched_id}")
+def delete_watch(watched_id: int, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
+    if not mem.unwatch(watched_id):
+        raise HTTPException(status_code=404, detail="no such watched item")
+    return JSONResponse({"deleted": True})
+
+
 @app.get("/api/info")
 def info() -> JSONResponse:
     from remo import lang as lang_mod

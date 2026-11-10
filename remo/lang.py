@@ -61,6 +61,14 @@ HI = {
     "plan_no_rems": "Aaj ke liye koi reminder nahi hai.",
     "plan_notes": "Aakhri baatein: {items}.",
     "plan_no_notes": "Abhi kuch yaad nahi karwaya.",
+    "dayplan_head_today": "Aaj ke liye {n} kaam {verb}: {items}.",
+    "dayplan_head_tomorrow": "Kal ke liye {n} kaam {verb}: {items}.",
+    "dayplan_head_dayafter": "Parso ke liye {n} kaam {verb}: {items}.",
+    "dayplan_none_today": "Aaj ke liye kuch khaas nahi hai.",
+    "dayplan_none_tomorrow": "Kal ke liye kuch khaas nahi hai.",
+    "dayplan_none_dayafter": "Parso ke liye kuch khaas nahi hai.",
+    "dayplan_verb_one": "hai",
+    "dayplan_verb_many": "hain",
 }
 
 MR = {
@@ -118,6 +126,14 @@ MR = {
     "plan_no_rems": "Aajsathi kahi reminder nahi.",
     "plan_notes": "Shevatya goshti: {items}.",
     "plan_no_notes": "Aata kahi lakshat thevla nahi.",
+    "dayplan_head_today": "Aaj sathi {n} kama {verb}: {items}.",
+    "dayplan_head_tomorrow": "Udya sathi {n} kama {verb}: {items}.",
+    "dayplan_head_dayafter": "Parva sathi {n} kama {verb}: {items}.",
+    "dayplan_none_today": "Aaj sathi kahi khas nahi.",
+    "dayplan_none_tomorrow": "Udya sathi kahi khas nahi.",
+    "dayplan_none_dayafter": "Parva sathi kahi khas nahi.",
+    "dayplan_verb_one": "aahe",
+    "dayplan_verb_many": "aahet",
 }
 
 TABLES = {"hi": HI, "mr": MR}

@@ -81,6 +81,28 @@ def test_state_includes_fired_and_changes(client: TestClient, tmp_path: Path) ->
     assert body["changes"][0]["watch_url"] == "https://github.com/o/r/issues/1"
 
 
+def test_delete_endpoints_remove_each_kind(client: TestClient, tmp_path: Path) -> None:
+    import os
+
+    from remo.memory import Memory
+
+    mem = Memory(Path(os.environ["REMO_DB"]))
+    note = mem.add_note("temporary")
+    reminder = mem.add_reminder("temporary", 9999999999.0)
+    entry = mem.upsert_work_entry("student", "", "", [], ["x"])
+    watched = mem.watch_url("github_issue", "https://github.com/o/r/issues/9")
+    mem.close()
+    assert client.delete(f"/api/notes/{note.id}").json() == {"deleted": True}
+    assert client.delete(f"/api/reminders/{reminder.id}").json() == {"deleted": True}
+    assert client.delete(f"/api/work/{entry.id}").json() == {"deleted": True}
+    assert client.delete(f"/api/watch/{watched.id}").json() == {"deleted": True}
+    assert client.get("/api/state").json()["notes"] == []
+    assert client.delete("/api/notes/4242").status_code == 404
+    assert client.delete("/api/reminders/4242").status_code == 404
+    assert client.delete("/api/work/4242").status_code == 404
+    assert client.delete("/api/watch/4242").status_code == 404
+
+
 def test_text_save_then_recall(client: TestClient) -> None:
     saved = client.post("/api/turn/text", json={"text": "yaad rakhna chai pini hai"}).json()
     assert saved["action"] == "saved" and saved["audio_url"]

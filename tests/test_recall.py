@@ -117,6 +117,15 @@ def test_latin_query_finds_devanagari_note(tmp_path: Path) -> None:
     m.close()
 
 
+def test_karne_counts_as_pending(tmp_path: Path) -> None:
+    m = Memory(tmp_path / "remo.db")
+    m.add_note("mujhe kal 2 PR merge karne hain")
+    say = R.compose_answer(m.list_recent(1), m)
+    assert "baaki hai" in say
+    assert "Mujhe ye mila" not in say
+    m.close()
+
+
 def test_devanagari_pending_note_composes_pending_tail(tmp_path: Path) -> None:
     m = Memory(tmp_path / "remo.db")
     m.add_note("मुझे कल नये प्रोजेक्ट पर काम करना है")

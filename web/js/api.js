@@ -54,5 +54,17 @@ window.RemoAPI = (() => {
     return res.json();
   }
 
-  return { turnText, turnAudio, state, info, alarms, speak, seed };
+  async function remove(kind, id) {
+    const res = await fetch(`/api/${kind}/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      let detail = "";
+      try { detail = (await res.json()).detail || ""; } catch { detail = ""; }
+      const err = new Error(detail || `server said ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    return res.json();
+  }
+
+  return { turnText, turnAudio, state, info, alarms, speak, seed, remove };
 })();
