@@ -95,6 +95,39 @@ class Reminder:
     created_at: float
 
 
+@dataclass
+class WorkEntry:
+    id: int
+    persona: str
+    org: str
+    issue_ref: str
+    done: list[str]
+    pending: list[str]
+    created_at: float
+    updated_at: float
+
+
+@dataclass
+class WatchedItem:
+    id: int
+    kind: str
+    url: str
+    cursor: str
+    last_checked_at: float
+    last_briefed_at: float
+
+
+@dataclass
+class Change:
+    id: int
+    watched_id: int
+    seen_at: float
+    summary: str
+    source_quote: str
+    source_link: str
+    briefed: bool
+
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY,
@@ -321,7 +354,150 @@ class Memory:
         self.db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
         self.db.commit()
 
+    # -- work entries ---------------------------------------------------
+    def upsert_work_entry(
+        self, persona: str, org: str, issue_ref: str, done: list[str], pending: list[str]
+    ) -> WorkEntry:
+        existing = self.find_work_entry(org, issue_ref)
+        now = time.time()
+        if existing is None:
+            cur = self.db.execute(
+                "INSERT INTO work_entries (persona, org, issue_ref, done_json, pending_json,"
+                " created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (persona, org, issue_ref, self.dumps(done), self.dumps(pending), now, now),
+            )
+            self.db.commit()
+            return WorkEntry(
+                id=cur.lastrowid or 0, persona=persona, org=org, issue_ref=issue_ref,
+                done=done, pending=pending, created_at=now, updated_at=now,
+            )
+        merged_done = existing.done + [d for d in done if d not in existing.done]
+        merged_pending = [p for p in existing.pending if p not in done]
+        merged_pending += [p for p in pending if p not in merged_pending]
+        self.db.execute(
+            "UPDATE work_entries SET done_json = ?, pending_json = ?, updated_at = ? WHERE id = ?",
+            (self.dumps(merged_done), self.dumps(merged_pending), now, existing.id),
+        )
+        self.db.commit()
+        existing.done, existing.pending, existing.updated_at = merged_done, merged_pending, now
+        return existing
+
+    def update_work_entry(self, entry_id: int, done: list[str], pending: list[str]) -> WorkEntry:
+        now = time.time()
+        self.db.execute(
+            "UPDATE work_entries SET done_json = ?, pending_json = ?, updated_at = ? WHERE id = ?",
+            (self.dumps(done), self.dumps(pending), now, entry_id),
+        )
+        self.db.commit()
+        row = self.db.execute("SELECT * FROM work_entries WHERE id = ?", (entry_id,)).fetchone()
+        return self._entry_from(row)
+
+    def find_work_entry(self, org: str = "", issue_ref: str = "") -> WorkEntry | None:
+        rows = self.db.execute("SELECT * FROM work_entries ORDER BY updated_at DESC").fetchall()
+        for row in rows:
+            org_ok = not org or row["org"].lower() == org.lower()
+            ref_ok = not issue_ref or row["issue_ref"].lower() == issue_ref.lower()
+            if org_ok and ref_ok and (org or issue_ref):
+                return self._entry_from(row)
+        return None
+
+    def list_work_entries(self, persona: str | None = None, limit: int = 20) -> list[WorkEntry]:
+        if persona:
+            rows = self.db.execute(
+                "SELECT * FROM work_entries WHERE persona = ? ORDER BY updated_at DESC LIMIT ?",
+                (persona, limit),
+            ).fetchall()
+        else:
+            rows = self.db.execute(
+                "SELECT * FROM work_entries ORDER BY updated_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [self._entry_from(r) for r in rows]
+
+    # -- watched items + changes ------------------------------------------
+    def watch_url(self, kind: str, url: str) -> WatchedItem:
+        self.db.execute("INSERT OR IGNORE INTO watched_items (kind, url) VALUES (?, ?)", (kind, url))
+        self.db.commit()
+        row = self.db.execute("SELECT * FROM watched_items WHERE url = ?", (url,)).fetchone()
+        return self._watched_from(row)
+
+    def list_watched(self) -> list[WatchedItem]:
+        return [self._watched_from(r) for r in self.db.execute("SELECT * FROM watched_items").fetchall()]
+
+    def update_cursor(self, watched_id: int, cursor: str, checked_at: float) -> None:
+        self.db.execute(
+            "UPDATE watched_items SET cursor = ?, last_checked_at = ? WHERE id = ?",
+            (cursor, checked_at, watched_id),
+        )
+        self.db.commit()
+
+    def touch_briefed(self, watched_id: int, briefed_at: float) -> None:
+        self.db.execute(
+            "UPDATE watched_items SET last_briefed_at = ? WHERE id = ?", (briefed_at, watched_id)
+        )
+        self.db.commit()
+
+    def store_changes(self, watched_id: int, changes: list[tuple[str, str, str, float]]) -> None:
+        self.db.executemany(
+            "INSERT INTO changes (watched_id, summary, source_quote, source_link, seen_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            [(watched_id, s, q, link, at) for s, q, link, at in changes],
+        )
+        self.db.commit()
+
+    def unbriefed_changes(self) -> list[tuple[WatchedItem, list[Change]]]:
+        out: list[tuple[WatchedItem, list[Change]]] = []
+        for watched in self.list_watched():
+            rows = self.db.execute(
+                "SELECT * FROM changes WHERE watched_id = ? AND briefed = 0 ORDER BY seen_at",
+                (watched.id,),
+            ).fetchall()
+            if rows:
+                out.append((watched, [self._change_from(r) for r in rows]))
+        return out
+
+    def mark_changes_briefed(self, change_ids: list[int]) -> None:
+        self.db.executemany(
+            "UPDATE changes SET briefed = 1 WHERE id = ?", [(i,) for i in change_ids]
+        )
+        self.db.commit()
+
     # -- helpers ----------------------------------------------------------
+    @staticmethod
+    def _entry_from(row: sqlite3.Row) -> WorkEntry:
+        return WorkEntry(
+            id=row["id"],
+            persona=row["persona"],
+            org=row["org"],
+            issue_ref=row["issue_ref"],
+            done=json.loads(row["done_json"] or "[]"),
+            pending=json.loads(row["pending_json"] or "[]"),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _watched_from(row: sqlite3.Row) -> WatchedItem:
+        return WatchedItem(
+            id=row["id"],
+            kind=row["kind"],
+            url=row["url"],
+            cursor=row["cursor"] or "",
+            last_checked_at=row["last_checked_at"] or 0,
+            last_briefed_at=row["last_briefed_at"] or 0,
+        )
+
+    @staticmethod
+    def _change_from(row: sqlite3.Row) -> Change:
+        return Change(
+            id=row["id"],
+            watched_id=row["watched_id"],
+            seen_at=row["seen_at"],
+            summary=row["summary"],
+            source_quote=row["source_quote"] or "",
+            source_link=row["source_link"] or "",
+            briefed=bool(row["briefed"]),
+        )
+
     @staticmethod
     def _reminder_from(row: sqlite3.Row) -> Reminder:
         return Reminder(

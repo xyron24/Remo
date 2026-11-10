@@ -28,6 +28,7 @@ def _load_dotenv(path: Path) -> None:
 @dataclass(frozen=True)
 class Settings:
     gnani_api_key: str = ""
+    github_token: str = ""
     stt_url: str = "https://api.vachana.ai/stt/v3"
     stt_stream_url: str = "wss://api.vachana.ai/stt/v3/stream"
     stt_model: str = "prisma-v2.5"
@@ -44,6 +45,7 @@ def load_settings(env_path: Path | None = None) -> Settings:
     defaults = Settings()
     return Settings(
         gnani_api_key=get("GNANI_API_KEY", ""),
+        github_token=get("GITHUB_TOKEN", ""),
         stt_url=get("GNANI_STT_URL", defaults.stt_url),
         stt_stream_url=get("GNANI_STT_STREAM_URL", defaults.stt_stream_url),
         stt_model=get("GNANI_STT_MODEL", defaults.stt_model),

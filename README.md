@@ -18,10 +18,14 @@ _Runs anywhere — backend on macOS, Windows, or Linux; use it from any browser 
 - **Spoken answers** — ask "kya bacha hai?" and Remo replies out loud, pending items first, in a Timbre voice.
 - **Reminders** — "kal subah 9 baje chai yaad dilana" and it chimes + speaks at 9, even after a restart.
 - **Day's plan & quiz** — "aaj ka plan batao" briefs the day; "quiz karo" tests you on your own notes.
+- **Work-log memory** — speak a progress update and Remo tracks done vs pending per project; "issue 214 mein kya bacha
+  hai?" answers from the log, weeks later.
+- **Change watcher** — "watch karo" a GitHub issue or repo and Remo briefs only what changed since you were last here,
+  with links. "Welcome back" merges your pending items, outside changes, and a suggested next step.
 
 ## On the way
 
-Work-log memory, change tracking ("what changed while you were away"), and a full regional-language experience.
+Telephony-grade noise handling, call-me-back reminders, and a full regional-language experience.
 
 ## Quickstart
 

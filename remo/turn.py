@@ -6,6 +6,8 @@ then left-off and recall answering. Stateless: confirmations travel back as a
 """
 from __future__ import annotations
 
+import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +22,8 @@ from remo.memory import Memory
 from remo import quiz as quiz_mod
 from remo import reminders as reminders_mod
 from remo.tts import synthesize
+from remo import watcher as watcher_mod
+from remo import worklog as worklog_mod
 
 log = get_logger("turn")
 
@@ -37,6 +41,18 @@ REMINDERS_OFF = "Theek hai, reminder nahi lagaya."
 
 _REMIND_MARKERS = ("yaad dilana", "yaad dila", "remind me", "reminder lagao", "reminder")
 
+_WATCH_MARKERS = ("watch karo", "track karo", "nazar rakho", "watch this")
+
+_UPDATE_MARKERS = ("koi update", "update aaya", "update aaye", "check update", "naya kya hai", "what changed",
+                   "what's new", "koi badlaav")
+
+_WELCOME_MARKERS = ("welcome back", "vapas aaya", "wapas aaya", "wapis aaya", "vapas aa gaya", "main vapas")
+
+WORK_ACK = "Yaad kar liya, kaam ki list mein jod diya."
+NO_WORK_RECORD = "Is kaam ka koi record nahi mila."
+NOTHING_WATCHED = "Abhi kuch watch nahi kar raha. 'Watch karo' ke baad link bolo."
+BAD_WATCH_URL = "Ye link samajh nahi aaya. GitHub issue ya repo ka link bolo."
+
 
 @dataclass
 class TurnResult:
@@ -44,16 +60,24 @@ class TurnResult:
     audio: Path | None
     action: str
     pending: dict | None = field(default=None)
+    links: list[str] = field(default_factory=list)
 
 
-def _speak(text: str, action: str, settings: Settings, speak: bool, pending: dict | None = None) -> TurnResult:
+def _speak(
+    text: str,
+    action: str,
+    settings: Settings,
+    speak: bool,
+    pending: dict | None = None,
+    links: list[str] | None = None,
+) -> TurnResult:
     audio: Path | None = None
     if speak:
         try:
             audio = synthesize(text, settings=settings)
         except Exception as exc:  # noqa: BLE001 - voice-out must never kill the turn
             log.warning("voice-out failed, answering in text only: %s", exc)
-    return TurnResult(text=text, audio=audio, action=action, pending=pending)
+    return TurnResult(text=text, audio=audio, action=action, pending=pending, links=links or [])
 
 
 def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, speak: bool = True) -> TurnResult:
@@ -66,6 +90,9 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
         if reason:
             return _speak(kw.PROMPT_REPEAT_HI, "repeat", settings, speak)
         mem.add_note(content)
+        if worklog_mod.is_work_update(content):
+            worklog_mod.store_update(mem, content)
+            return _speak(WORK_ACK, "saved", settings, speak)
         return _speak(kw.ACK_SAVED_HI, "saved", settings, speak)
 
     if kw.is_undo_last(text):
@@ -96,7 +123,26 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
         pending = {"action": "quiz", "session": session.to_dict()} if session else None
         return _speak(say, "quiz_ask", settings, speak, pending=pending)
 
+    norm = kw.normalize(text)
+    if any(marker in norm for marker in _WATCH_MARKERS):
+        return _watch_turn(text, mem=mem, settings=settings, speak=speak)
+
+    if any(marker in norm for marker in _UPDATE_MARKERS):
+        return check_updates(mem=mem, settings=settings, speak=speak)
+
+    if any(marker in norm for marker in _WELCOME_MARKERS):
+        deltas = mem.unbriefed_changes()
+        say, links = worklog_mod.compose_welcome_back(mem.list_work_entries(limit=10), deltas)
+        _mark_deltas_briefed(mem, deltas)
+        return _speak(say, "welcome", settings, speak, links=links)
+
     if recall_mod.is_left_off_query(text):
+        org, ref = worklog_mod.detect_refs(text)
+        if org or ref:
+            entry = mem.find_work_entry(org, ref)
+            if entry is None:
+                return _speak(NO_WORK_RECORD, "left_off", settings, speak)
+            return _speak(worklog_mod.compose_entry(entry), "left_off", settings, speak)
         say = recall_mod.compose_left_off(mem.list_recent(20))
         return _speak(say, "left_off", settings, speak)
 
@@ -145,6 +191,43 @@ def complete_remind_task(
     mem.add_reminder(text.strip(), fire_at)
     readback = reminders_mod.format_readback(datetime.fromtimestamp(fire_at), datetime.now())
     return _speak(f"Ho gaya: {readback} — {text.strip()}.", "reminded", settings, speak)
+
+
+def _watch_turn(text: str, *, mem: Memory, settings: Settings, speak: bool) -> TurnResult:
+    match = re.search(r"https?://\S+", text)
+    url = match.group(0).rstrip(".,!?:;") if match else ""
+    kind = watcher_mod.kind_for_url(url) if url else None
+    if not kind:
+        return _speak(BAD_WATCH_URL, "help", settings, speak)
+    mem.watch_url(kind, url)
+    return _speak("Ho gaya, is par nazar rakhunga. 'Koi update' bolkar haal pucho.", "watching", settings, speak)
+
+
+def _mark_deltas_briefed(mem: Memory, deltas) -> None:
+    ids = [c.id for _, changes in deltas for c in changes]
+    if ids:
+        mem.mark_changes_briefed(ids)
+    for watched, _ in deltas:
+        mem.touch_briefed(watched.id, time.time())
+
+
+def check_updates(
+    mem: Memory, *, settings: Settings | None = None, speak: bool = True, fetch=None
+) -> TurnResult:
+    """Poll watched sources now, then brief only what is new."""
+    settings = settings or load_settings()
+    if not mem.list_watched():
+        return _speak(NOTHING_WATCHED, "help", settings, speak)
+    report = watcher_mod.poll_all(mem, token=settings.github_token, fetch=fetch)
+    deltas = mem.unbriefed_changes()
+    label = datetime.fromtimestamp(report.checked_at).strftime("%I:%M %p").lstrip("0")
+    say, links = watcher_mod.compose_updates(deltas, f"as of {label}")
+    if report.errors and not deltas:
+        say = "Source se sampark nahi ho paya, isliye sirf yaad se bata raha hoon. " + say
+    elif report.errors:
+        say += " Kuch sources se sampark nahi hua."
+    _mark_deltas_briefed(mem, deltas)
+    return _speak(say, "updates", settings, speak, links=links)
 
 
 def answer_quiz(
