@@ -11,6 +11,7 @@
 Runs on your machine · use it from any browser or phone
 
 [Demo](#demo) ·
+[Architecture](#architecture) ·
 [Get started](#quick-start) ·
 [What it does](#what-remo-does) ·
 [Powered by Gnani AI](#powered-by-gnani-ai) ·
@@ -44,8 +45,15 @@ Supported platforms:
 
 ## Demo
 
-> The 60-second demo video lands here with the submission, posted on LinkedIn and X with
-> `#GreatIndianAIInternshipChallenge` and `#GnaniAI`.
+[![Watch the Remo demo video](https://img.youtube.com/vi/AwqtV3njztQ/maxresdefault.jpg)](https://youtu.be/AwqtV3njztQ)
+
+Watch the demo on YouTube: <https://youtu.be/AwqtV3njztQ>
+
+## Architecture
+
+![Remo architecture diagram](assets/architecture.png)
+
+Voice or text captured in the browser studio (`1. Client`) is sent to the local FastAPI backend (`2. Backend Server`), which streams 16 kHz audio to **Gnani AI Prisma STT** (`5. External Services`) and passes the transcript to Remo's orchestration layer (`3. Brain / AI Logic`). Keyword-prefixed utterances save immediately, while queries, work updates, reminders, and briefings read and write to the local SQLite database (`4. Storage`) and poll watched public GitHub repos/issues (`5. External Services`) using seen-state cursors. The reply text is synthesized back into speech via **Gnani AI Timbre TTS**, cached on disk, and streamed to the browser alongside updated dashboard state.
 
 ## What Remo does
 
@@ -114,11 +122,6 @@ then open **http://127.0.0.1:8000** in a browser, press the mic, and say "yaad r
 Remo files it as done vs pending. **Days later**, "kya bacha hai?" gets a pending-first answer with the last-update
 date. **Welcome back** adds what changed out there: new comments, merged PRs, shifted milestones, each with a link,
 each announced with its as-of time so cached news is never presented as live.
-
-## Architecture
-
-> TODO(user): paste the Excalidraw architecture diagram here as `assets/architecture.png` and replace this note with a
-> one-paragraph walkthrough. Reminder: do NOT submit until this section is filled.
 
 ## Noise benchmark
 
