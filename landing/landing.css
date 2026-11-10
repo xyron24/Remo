@@ -125,8 +125,46 @@ a { color: var(--bordo); text-underline-offset: 0.22em; }
 }
 .btn-nav:hover { transform: translateY(-1px); background: var(--bordo-strong); }
 
+/* KAIRO-inspired Home Banner Showcase */
+.banner-hero {
+  padding: clamp(1.5rem, 3vw, 2.4rem) 0 0;
+}
+.hero-banner-frame {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lift);
+}
+.hero-banner-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 490px;
+  object-fit: cover;
+  object-position: center;
+}
+.hero-banner-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 1.25rem;
+  background:
+    radial-gradient(28rem 8rem at 10% 50%, var(--bordo-soft), transparent 70%),
+    radial-gradient(28rem 8rem at 90% 50%, var(--green-soft), transparent 70%),
+    var(--surface);
+  border-top: 1px solid var(--rule);
+}
+.banner-bar-copy { display: grid; gap: 0.1rem; }
+.banner-bar-copy strong { font-family: var(--display); font-size: 1.02rem; color: var(--ink); }
+.banner-bar-copy span { font-size: 0.82rem; color: var(--muted); }
+.banner-bar-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+
 /* Hero (VoiceStudio 2-column split) */
-.hero { padding: clamp(3rem, 6vw, 5rem) 0 clamp(3.5rem, 6vw, 5.5rem); }
+.hero { padding: clamp(2.6rem, 5vw, 4.2rem) 0 clamp(3.5rem, 6vw, 5.5rem); }
 .hero-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.15fr);

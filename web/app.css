@@ -648,6 +648,28 @@ button[type="submit"]:active, .primary:active { transform: translateY(1px); box-
   gap: 0.95rem;
   align-content: start;
 }
+.ctx-banner {
+  display: block;
+  text-decoration: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.14s, border-color 0.14s;
+}
+.ctx-banner:hover { transform: translateY(-2px); border-color: var(--bordo); }
+.ctx-banner img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
+.ctx-banner-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.45rem 0.75rem;
+  font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+  color: var(--bordo);
+  background: var(--surface);
+  border-top: 1px solid var(--border-soft);
+}
+.ctx-banner-foot span:last-child { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--accent); }
+.ctx-banner-foot svg { width: 0.85rem; height: 0.85rem; }
 .ctx-hero-panel {
   background:
     radial-gradient(18rem 10rem at 92% 0%, var(--accent-dim), transparent 68%),
