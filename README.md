@@ -16,11 +16,12 @@ _Runs anywhere — backend on macOS, Windows, or Linux; use it from any browser 
 - **Realtime transcription** — Gnani Prisma streams your voice to text over WebSocket, with vocabulary from your own
   notes boosted so it keeps hearing *you* better.
 - **Spoken answers** — ask "kya bacha hai?" and Remo replies out loud, pending items first, in a Timbre voice.
+- **Reminders** — "kal subah 9 baje chai yaad dilana" and it chimes + speaks at 9, even after a restart.
+- **Day's plan & quiz** — "aaj ka plan batao" briefs the day; "quiz karo" tests you on your own notes.
 
 ## On the way
 
-Reminders, voice quiz, work-log memory, change tracking ("what changed while you were away"), and a full
-regional-language experience.
+Work-log memory, change tracking ("what changed while you were away"), and a full regional-language experience.
 
 ## Quickstart
 

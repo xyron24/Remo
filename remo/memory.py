@@ -86,6 +86,15 @@ class Note:
     source: str
 
 
+@dataclass
+class Reminder:
+    id: int
+    text: str
+    fire_at: float
+    armed: bool
+    created_at: float
+
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY,
@@ -141,6 +150,10 @@ CREATE TABLE IF NOT EXISTS changes (
     source_quote TEXT NOT NULL DEFAULT '',
     source_link TEXT NOT NULL DEFAULT '',
     briefed INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
 );
 """
 
@@ -270,7 +283,55 @@ class Memory:
         ).fetchall()
         return [(r["pattern"], r["replacement"]) for r in rows]
 
+    # -- reminders ------------------------------------------------------
+    def add_reminder(self, text: str, fire_at: float) -> Reminder:
+        now = time.time()
+        cur = self.db.execute(
+            "INSERT INTO reminders (text, fire_at, armed, created_at) VALUES (?, ?, 1, ?)",
+            (text, fire_at, now),
+        )
+        self.db.commit()
+        return Reminder(id=cur.lastrowid or 0, text=text, fire_at=fire_at, armed=True, created_at=now)
+
+    def list_armed(self, before: float | None = None) -> list[Reminder]:
+        if before is None:
+            rows = self.db.execute("SELECT * FROM reminders WHERE armed = 1 ORDER BY fire_at").fetchall()
+        else:
+            rows = self.db.execute(
+                "SELECT * FROM reminders WHERE armed = 1 AND fire_at <= ? ORDER BY fire_at", (before,)
+            ).fetchall()
+        return [self._reminder_from(r) for r in rows]
+
+    def disarm(self, reminder_id: int) -> bool:
+        cur = self.db.execute("UPDATE reminders SET armed = 0 WHERE id = ?", (reminder_id,))
+        self.db.commit()
+        return cur.rowcount > 0
+
+    def delete_reminder(self, reminder_id: int) -> bool:
+        cur = self.db.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))
+        self.db.commit()
+        return cur.rowcount > 0
+
+    # -- settings ---------------------------------------------------------
+    def get_setting(self, key: str, default: str = "") -> str:
+        row = self.db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        self.db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+        self.db.commit()
+
     # -- helpers ----------------------------------------------------------
+    @staticmethod
+    def _reminder_from(row: sqlite3.Row) -> Reminder:
+        return Reminder(
+            id=row["id"],
+            text=row["text"],
+            fire_at=row["fire_at"],
+            armed=bool(row["armed"]),
+            created_at=row["created_at"],
+        )
+
     @staticmethod
     def _note_from(row: sqlite3.Row) -> Note:
         return Note(
