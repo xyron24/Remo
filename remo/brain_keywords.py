@@ -11,6 +11,7 @@ import unicodedata
 
 SAVE_KEYWORDS = (
     "yaad rakhna", "remember", "याद रखना",
+    "रिमेम्बर", "रिमेंबर",
     "lakshat thev", "lakshat theva", "लक्षात ठेव", "लक्षात ठेवा",
 )
 

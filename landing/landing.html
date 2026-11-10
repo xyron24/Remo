@@ -3,105 +3,513 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Remo: a voice memory that tells you what changed</title>
-<link rel="stylesheet" href="/static/tokens.css">
+<title>Remo — Hinglish &amp; Marathi Voice Memory | Powered by Gnani AI</title>
+<meta name="description" content="Speak once. Remo remembers where you left off and tells you what changed while you were away. Local-first Hinglish and Marathi voice memory powered by Gnani AI.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236e1d31'/%3E%3Crect x='6' y='11.5' width='3.2' height='9' rx='1.6' fill='%23faf5eb'/%3E%3Crect x='11.6' y='8.5' width='3.2' height='15' rx='1.6' fill='%23faf5eb'/%3E%3Crect x='6.5' y='14.4' width='7.8' height='3.2' rx='1.6' fill='%23faf5eb'/%3E%3Crect x='17.2' y='5.5' width='3.2' height='21' rx='1.6' fill='%234fb286'/%3E%3Crect x='22.8' y='12.5' width='3.2' height='7' rx='1.6' fill='%23faf5eb'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/landing/landing.css">
 </head>
 <body>
-<header class="wrap nav">
-  <span class="wordmark">Remo</span>
-  <nav><a href="/">Open the app</a><a href="#models">Gnani AI</a><a href="#privacy">Privacy</a><a href="#start">Start</a></nav>
+
+<a class="skip-link" href="#how">Skip to content</a>
+
+<header class="topbar">
+  <div class="wrap bar">
+    <a class="brand" href="#top" aria-label="Remo overview">
+      <span class="brand-tile" aria-hidden="true">
+        <svg viewBox="0 0 32 32">
+          <rect x="4.5" y="10.5" width="3.5" height="11" rx="1.75" fill="#faf5eb"/>
+          <rect x="10.8" y="7" width="3.5" height="18" rx="1.75" fill="#faf5eb"/>
+          <rect x="5" y="14.25" width="8.5" height="3.5" rx="1.75" fill="#faf5eb"/>
+          <rect x="17.1" y="4" width="3.5" height="24" rx="1.75" fill="#4fb286"/>
+          <rect x="23.4" y="11.5" width="3.5" height="9" rx="1.75" fill="#faf5eb"/>
+        </svg>
+      </span>
+      <span class="brand-name">Remo<span class="brand-tld">.local</span></span>
+    </a>
+
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#workflows">Workflows</a>
+      <a href="#how">How it works</a>
+      <a href="#compare">Why Remo</a>
+      <a href="#models">Gnani AI</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#start">Start</a>
+    </nav>
+
+    <div class="nav-actions">
+      <span class="lang-tag">Hinglish · मराठी</span>
+      <a class="btn-nav" href="/">Open Web App</a>
+    </div>
+  </div>
 </header>
 
-<main class="wrap">
+<main id="top">
+  <!-- Hero: VoiceStudio two-column studio composition -->
   <section class="hero">
-    <h1>Speak once.<br>Remember everything.<br>Miss nothing.</h1>
-    <p class="lede">Remo is a Hinglish and Marathi voice memory. Tell it your day, your work, your farm, your shop.
-      and days later it answers <em>where you left off</em> and <em>what changed while you were away</em>,
-      out loud, in your language.</p>
-    <p><a class="cta" href="/">Try it in your browser</a></p>
-    <p class="note">Runs anywhere: macOS, Windows, Linux, and any phone, Android and iOS included.</p>
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <a class="seal" href="#models">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M8 7v10M4 10v4M16 6v12M20 10v4"/></svg>
+          <span>Great Indian AI Challenge 2026</span>
+          <span class="seal-sep">Gnani AI Stack</span>
+        </a>
+
+        <h1>Speak once.<br>Never lose where you left off.</h1>
+        <p class="hero-lead">
+          A local-first Hinglish and Marathi voice memory. Auto-save work progress on a keyword,
+          recall <strong>pending tasks first</strong> days later, and hear <strong>what changed while you were away</strong> — out loud.
+        </p>
+
+        <div class="action-banner">
+          <div class="banner-meta">
+            <span class="banner-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 19v3"/></svg>
+            </span>
+            <div>
+              <p class="banner-title">Remo Voice Studio</p>
+              <p class="banner-sub">Local-first · SQLite + Gnani Speech</p>
+            </div>
+          </div>
+          <div class="banner-btns">
+            <a class="btn-primary" href="/">Try in Browser</a>
+            <a class="btn-icon" href="#try" title="Try example phrases" aria-label="Try example phrases">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3"/></svg>
+            </a>
+          </div>
+        </div>
+
+        <p class="platforms">Runs anywhere: <span>macOS</span> · <span>Windows</span> · <span>Linux</span> · <span>Android</span> · <span>iOS</span></p>
+
+        <dl class="stats-strip" aria-label="Remo highlights">
+          <div><dd>2 langs</dd><dt>Hinglish &amp; Marathi</dt></div>
+          <div><dd>8 kHz</dd><dt>Telephony Bench</dt></div>
+          <div><dd>Zero</dd><dt>Save Prompts</dt></div>
+          <div><dd>100%</dd><dt>Local Storage</dt></div>
+        </dl>
+      </div>
+
+      <!-- Right Stage: ASCII signal wave + floating dark-studio app window -->
+      <div class="hero-stage">
+        <div class="ascii-signal" aria-hidden="true">
+<pre>·       ·       ·       ·       ·       ·       ·       ·       ·
+                         ...
+·       ·     ..:::::.  ·       ·       ·..::.      ·       ·
+            ..:+++:+++:.              ..:++:::+.
+       ....::++:.....:+:.       .....:++:..   .:
+   ..::::+++::..     .:+:.  ...::::++::.
+.::++::::...          .:+:..::+++::::..             ·       ·
+ .+:::++:..            .:+++:+++:..
+   .::..                 .:::::..                   ·       ·</pre>
+        </div>
+
+        <div class="stage-window" role="region" aria-label="Interactive preview of Remo Studio">
+          <div class="win-side">
+            <div class="win-lights" aria-hidden="true"><i></i><i></i><i></i></div>
+            <div class="win-brand">
+              <svg viewBox="0 0 32 32" width="16" height="16" aria-hidden="true">
+                <rect x="4.5" y="10.5" width="3.5" height="11" rx="1.75" fill="#db6f88"/>
+                <rect x="10.8" y="7" width="3.5" height="18" rx="1.75" fill="#db6f88"/>
+                <rect x="5" y="14.25" width="8.5" height="3.5" rx="1.75" fill="#db6f88"/>
+                <rect x="17.1" y="4" width="3.5" height="24" rx="1.75" fill="#4fb286"/>
+                <rect x="23.4" y="11.5" width="3.5" height="9" rx="1.75" fill="#faf5eb"/>
+              </svg>
+              <span>Remo</span>
+            </div>
+            <div class="win-nav">
+              <button type="button" class="win-tab active" data-scene="save">Auto-Save</button>
+              <button type="button" class="win-tab" data-scene="leftoff">Left Off</button>
+              <button type="button" class="win-tab" data-scene="welcome">Welcome Back</button>
+            </div>
+            <div class="win-device"><i></i>Local SQLite</div>
+          </div>
+
+          <div class="win-main">
+            <div class="win-top">
+              <span id="scene-title">Keyword Auto-Save</span>
+              <span class="win-pill" id="scene-lang">hi-IN · Prisma v2.5</span>
+            </div>
+            <div class="win-body">
+              <div class="win-speaker">
+                <span class="win-avatar">NL</span>
+                <span>Voice · <b>Nalini (Hinglish)</b></span>
+                <span class="win-badge" id="scene-badge">SAVED</span>
+              </div>
+              <p class="win-quote" id="scene-quote">“Yaad rakhna, issue 214: login fix ho gaya, docs baaki hai.”</p>
+              <div class="win-reply" id="scene-reply">
+                Samajh gaya: 1 done, 1 baaki. Yaad kar liya.
+              </div>
+              <div class="win-wave-row">
+                <span class="win-play" aria-hidden="true">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.5v13l11-6.5-11-6.5Z"/></svg>
+                </span>
+                <div class="win-bars" aria-hidden="true">
+                  <i style="height:28%"></i><i style="height:46%"></i><i style="height:70%"></i><i style="height:42%"></i>
+                  <i style="height:82%"></i><i style="height:95%"></i><i style="height:64%"></i><i style="height:50%"></i>
+                  <i style="height:88%"></i><i style="height:76%"></i><i style="height:44%"></i><i style="height:68%"></i>
+                  <i style="height:92%"></i><i style="height:58%"></i><i style="height:36%"></i><i style="height:74%"></i>
+                  <i style="height:86%"></i><i style="height:62%"></i><i style="height:40%"></i><i style="height:55%"></i>
+                  <i style="height:32%"></i><i style="height:48%"></i><i style="height:66%"></i><i style="height:30%"></i>
+                </div>
+                <span class="win-time">0:04</span>
+              </div>
+              <div class="win-chips" id="scene-chips">
+                <span class="chip-ok">✓ login fix</span>
+                <span class="chip-pend">○ docs baaki</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <section>
-    <h2>How a day with Remo sounds</h2>
-    <ol class="steps">
-      <li><strong>Evening, two minutes.</strong> “Yaad rakhna, issue 214: login fix ho gaya, docs baaki hai.”
-        Stored, no questions asked.</li>
-      <li><strong>Days later.</strong> “Issue 214 mein kya bacha hai?” Remo answers with what is pending first.</li>
-      <li><strong>Welcome back.</strong> “Koi update aaya?” Remo briefs what changed on the watched issue since
-        you were last here, with links.</li>
-    </ol>
+  <!-- Showcase Grid: VoiceStudio-inspired workflow cards -->
+  <section class="showcase" id="workflows">
+    <div class="wrap">
+      <div class="sect-head">
+        <h2 class="statement">Speak. Track. Catch up.</h2>
+        <p class="sect-sub">Six focused voice workflows — zero approval pestering, built for real work and daily life.</p>
+      </div>
+
+      <div class="bento">
+        <article class="bento-card">
+          <div class="mini-win">
+            <div class="mini-bar"><i></i><i></i><i></i><span>Keyword Gate</span></div>
+            <div class="mini-body">
+              <div class="mini-row"><span class="m-tag">TRIGGER</span><code>yaad rakhna</code></div>
+              <p class="m-line">“…maths mein integration ho gaya.”</p>
+              <div class="mini-ack">✓ Stored instantly · “Yaad kar liya”</div>
+            </div>
+          </div>
+          <h3>Zero-friction auto-save</h3>
+          <p>Start with “yaad rakhna”, “remember”, or “lakshat thev” and Remo saves immediately — no “save kar doon?” interruption.</p>
+        </article>
+
+        <article class="bento-card">
+          <div class="mini-win">
+            <div class="mini-bar"><i></i><i></i><i></i><span>Work Memory</span></div>
+            <div class="mini-body">
+              <div class="mini-row"><strong>issue 214</strong><span class="m-tag">GSoC</span></div>
+              <div class="m-item pend">○ docs &amp; caching comment</div>
+              <div class="m-item done">✓ login fix &amp; unit tests</div>
+            </div>
+          </div>
+          <h3>Done vs Pending extraction</h3>
+          <p>Speak naturally about your code, shop stock, farm spray, or clinic visits. Remo structures what is finished and what remains.</p>
+        </article>
+
+        <article class="bento-card">
+          <div class="mini-win">
+            <div class="mini-bar"><i></i><i></i><i></i><span>Left-Off Recall</span></div>
+            <div class="mini-body">
+              <p class="m-line">“Issue 214 mein kya bacha hai?”</p>
+              <div class="mini-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span>Pending first · 2d ago</span></div>
+            </div>
+          </div>
+          <h3>Pending-first answers</h3>
+          <p>Days later, ask where you left off. Remo leads with what is still pending, when you last updated it, and speaks the reply.</p>
+        </article>
+
+        <article class="bento-card">
+          <div class="mini-win">
+            <div class="mini-bar"><i></i><i></i><i></i><span>Change Watcher</span></div>
+            <div class="mini-body">
+              <div class="mini-row"><span>python/cpython</span><span class="m-tag new">NEW</span></div>
+              <p class="m-line">Maintainer comment + PR merged since Tuesday.</p>
+            </div>
+          </div>
+          <h3>What changed while away</h3>
+          <p>Point Remo at any public GitHub repo or issue. Say “welcome back” for your pending items merged with fresh external deltas.</p>
+        </article>
+
+        <article class="bento-card">
+          <div class="mini-win">
+            <div class="mini-bar"><i></i><i></i><i></i><span>Cross-Script</span></div>
+            <div class="mini-body">
+              <div class="mini-pills"><span class="on">Hinglish · Nalini</span><span>मराठी · Zahira</span></div>
+              <p class="m-line">Saved “मैथ्स” ↔ Found via “maths”</p>
+            </div>
+          </div>
+          <h3>Hinglish &amp; Marathi end-to-end</h3>
+          <p>Works across Devanagari and Latin scripts, adapts to your personal vocabulary with Prisma word boosting, and fixes mishearings.</p>
+        </article>
+
+        <article class="bento-card">
+          <div class="mini-win">
+            <div class="mini-bar"><i></i><i></i><i></i><span>Noise Bench</span></div>
+            <div class="mini-body">
+              <div class="mini-row"><span>8 kHz Telephony</span><span class="m-tag">SNR TESTED</span></div>
+              <p class="m-line">Low confidence? Re-asks instead of saving garbage.</p>
+            </div>
+          </div>
+          <h3>Built for noisy environments</h3>
+          <p>Tested on fan, traffic, and crowd noise at 16 kHz and 8 kHz telephony downsamples with confidence-gated re-asks.</p>
+        </article>
+      </div>
+    </div>
   </section>
 
-  <section>
-    <h2>What it does</h2>
-    <ul class="features">
-      <li><strong>Keyword saving.</strong> “Yaad rakhna”, “remember”, or “lakshat thev” stores instantly. Undo is one
-        sentence away.</li>
-      <li><strong>Work memory.</strong> Done vs pending, per project and issue, for students, farmers, shopkeepers,
-        and health workers alike.</li>
-      <li><strong>Change watcher.</strong> Point Remo at a GitHub issue or repo; it reports only what is new.</li>
-      <li><strong>Reminders that speak.</strong> Hinglish times (“saade nau”, “5 minute baad”), chimed and spoken,
-        surviving restarts.</li>
-      <li><strong>Quiz + day plan.</strong> Tested on your own notes; briefed every morning.</li>
-      <li><strong>Learns your voice.</strong> Your vocabulary boosts recognition; stubborn mishearings become fixes.</li>
-    </ul>
+  <!-- 3-Step Flow (KAIRO clarity) -->
+  <section class="alt" id="how">
+    <div class="wrap">
+      <div class="sect-head">
+        <h2>How a day with Remo sounds</h2>
+        <p class="sect-sub">No forms to fill. Open the browser app, press Space or click the mic, and talk naturally.</p>
+      </div>
+      <div class="steps-grid">
+        <div class="step-card">
+          <span class="step-n">1</span>
+          <h3>Evening, two minutes</h3>
+          <p>“Yaad rakhna, issue 214: login fix ho gaya, docs baaki hai.” Stored automatically as Done vs Pending with a crisp spoken ack.</p>
+        </div>
+        <div class="step-card">
+          <span class="step-n">2</span>
+          <h3>Days later, pick right up</h3>
+          <p>“Issue 214 mein kya bacha hai?” Remo searches across scripts and answers with what is pending first, spoken by Timbre.</p>
+        </div>
+        <div class="step-card">
+          <span class="step-n">3</span>
+          <h3>Welcome back briefing</h3>
+          <p>“Welcome back” merges your pending tasks, any new activity on watched GitHub URLs, and today’s armed reminders in one brief.</p>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <section>
-    <h2>Try saying</h2>
-    <table class="say">
-      <tr><td>“Yaad rakhna, issue 214: login fix ho gaya, docs baaki hai”</td><td>Stored as done vs pending</td></tr>
-      <tr><td>“Issue 214 mein kya bacha hai?”</td><td>Pending-first answer, out loud</td></tr>
-      <tr><td>“Welcome back”</td><td>Your pending + outside changes + next step</td></tr>
-      <tr><td>“Kal subah 9 baje chai yaad dilana”</td><td>Chimed and spoken at 9</td></tr>
-      <tr><td>“Lakshat thev, udya meeting aahe”</td><td>The same loop in Marathi</td></tr>
-    </table>
+  <!-- Interactive Try Saying Table -->
+  <section id="try">
+    <div class="wrap">
+      <div class="sect-head">
+        <h2>Try saying — or click to run</h2>
+        <p class="sect-sub">Click any phrase below to prefill it directly in the Remo web app.</p>
+      </div>
+      <div class="sheet">
+        <table class="say-table">
+          <tbody>
+            <tr>
+              <td><a href="/?say=Yaad+rakhna,+issue+214:+login+fix+ho+gaya,+docs+baaki+hai">“Yaad rakhna, issue 214: login fix ho gaya, docs baaki hai”</a></td>
+              <td>Structured work entry saved instantly (Done vs Pending)</td>
+            </tr>
+            <tr>
+              <td><a href="/?say=Issue+214+mein+kya+bacha+hai?">“Issue 214 mein kya bacha hai?”</a></td>
+              <td>Pending-first recall answer, spoken aloud</td>
+            </tr>
+            <tr>
+              <td><a href="/?say=Welcome+back">“Welcome back”</a></td>
+              <td>Pending tasks + GitHub watcher deltas + next step</td>
+            </tr>
+            <tr>
+              <td><a href="/?say=Kal+subah+9+baje+chai+yaad+dilana">“Kal subah 9 baje chai yaad dilana”</a></td>
+              <td>Hinglish time parsed, read back, chimed &amp; spoken at 9</td>
+            </tr>
+            <tr>
+              <td><a href="/?say=Maths+mein+quiz+karo">“Maths mein quiz karo”</a></td>
+              <td>Generates spoken quiz questions from your saved notes</td>
+            </tr>
+            <tr>
+              <td><a href="/?say=Lakshat+thev,+udya+meeting+aahe">“Lakshat thev, udya meeting aahe”</a></td>
+              <td>Full save + recall + voice loop in Marathi</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
+  <!-- Comparison Table (VoiceStudio style) -->
+  <section class="alt" id="compare">
+    <div class="wrap">
+      <div class="sect-head">
+        <h2>Why Remo</h2>
+        <p class="sect-sub">Purpose-built for bilingual Indian voice memory, work continuity, and local ownership.</p>
+      </div>
+      <div class="sheet">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Capability</th>
+              <th>Remo <small>Local Web Studio</small></th>
+              <th>Voice Notes Apps</th>
+              <th>Desktop Hotkey Tools</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th>Data &amp; Memory</th>
+              <td>Local SQLite on your machine</td>
+              <td>Uploaded to vendor cloud</td>
+              <td>Local folder</td>
+            </tr>
+            <tr>
+              <th>Save Friction</th>
+              <td>Instant keyword gate (“yaad rakhna”)</td>
+              <td>Manual tap / save dialog</td>
+              <td>Prompts before every save</td>
+            </tr>
+            <tr>
+              <th>Work Continuity</th>
+              <td>Done vs Pending + “Where I left off”</td>
+              <td>Flat transcript list</td>
+              <td>General notes only</td>
+            </tr>
+            <tr>
+              <th>External Changes</th>
+              <td>GitHub repo/issue cursor + delta brief</td>
+              <td>Not supported</td>
+              <td>Not supported</td>
+            </tr>
+            <tr>
+              <th>Platforms</th>
+              <td>Any browser (macOS, Linux, Windows, Mobile)</td>
+              <td>App / browser</td>
+              <td>Windows desktop only</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Powered by Gnani AI -->
   <section id="models">
-    <h2>Powered by Gnani AI</h2>
-    <dl class="models">
-      <div><dt>Prisma</dt><dd>Speech-to-text over a realtime stream: Hinglish and Marathi, with your words
-        boosted and a public noise benchmark in the repo.</dd></div>
-      <div><dt>Timbre</dt><dd>Text-to-speech for every reply, briefing, and alarm: Nalini for Hinglish, Zahira for
-        Marathi.</dd></div>
-      <div><dt>Evon</dt><dd>Reasoning upgrades on Gnani's open-weight model are next on the roadmap.</dd></div>
-    </dl>
+    <div class="wrap">
+      <div class="sect-head">
+        <h2>Powered by Gnani AI</h2>
+        <p class="sect-sub">Every spoken word in Remo — both listening and speaking — runs on Gnani’s speech models.</p>
+      </div>
+      <div class="cards-3">
+        <div class="info-card">
+          <span class="card-kicker">STT · v2.5</span>
+          <h3>Prisma</h3>
+          <p>Realtime WebSocket streaming (16 kHz / 1024-byte PCM + REST fallback) for Hinglish and Marathi, boosted by your own note vocabulary.</p>
+        </div>
+        <div class="info-card">
+          <span class="card-kicker">TTS · v2.5</span>
+          <h3>Timbre</h3>
+          <p>Speaks every confirmation, recall answer, morning plan, quiz prompt, and alarm using Nalini (Hinglish) and Zahira (Marathi) with local disk caching.</p>
+        </div>
+        <div class="info-card">
+          <span class="card-kicker">Reasoning · Roadmap</span>
+          <h3>Evon v3.3</h3>
+          <p>Today’s extraction is fast, offline, and deterministic. Self-hosted Evon reasoning upgrades sit behind the same turn interface next.</p>
+        </div>
+      </div>
+      <div class="pill-row">
+        <span>Prisma v2.5 STT</span>
+        <span>Timbre v2.5 TTS</span>
+        <span>Hinglish + Marathi</span>
+        <span>8 kHz Noise Bench</span>
+        <span>#GnaniAI</span>
+      </div>
+    </div>
   </section>
 
-  <section id="privacy">
-    <h2>Your memory stays yours</h2>
-    <p>Notes, reminders, and keys live on your own machine. Voice goes to Gnani for transcription, text goes to Gnani
-      for speech, and nothing else leaves. The demo uses made-up data only.</p>
+  <!-- Privacy & Honest Limits -->
+  <section class="alt" id="privacy">
+    <div class="wrap">
+      <div class="sect-head">
+        <h2>Your memory stays yours</h2>
+        <p class="sect-sub">Plain facts about where your voice, notes, and watched links live.</p>
+      </div>
+      <div class="cards-3">
+        <div class="info-card">
+          <h3>Stays on your machine</h3>
+          <p>Notes, work entries, reminders, boost words, fix rules, and keys live locally in <code>~/.remo</code>. No Remo cloud server exists.</p>
+        </div>
+        <div class="info-card">
+          <h3>Sent to Gnani</h3>
+          <p>Audio during mic capture goes to Prisma for transcription, and reply text goes to Timbre for synthesis. Nothing else leaves.</p>
+        </div>
+        <div class="info-card">
+          <h3>Watched sources</h3>
+          <p>GitHub repos or issues you explicitly watch are polled via plain public HTTP requests. Your personal notes are never sent out.</p>
+        </div>
+      </div>
+
+      <div class="limits-box">
+        <h3>Honest current limits</h3>
+        <ul>
+          <li>Understanding is extractive today (no LLM in the loop yet) — fast and deterministic on your words; Evon reasoning is next.</li>
+          <li>The repository noise benchmark uses Timbre-synthesized Hinglish overlays until field recordings land.</li>
+          <li>Quiz grading and reminder read-backs stay Hinglish-first pending native Marathi review.</li>
+          <li>Single-user local studio: no accounts or cloud sync by design.</li>
+        </ul>
+      </div>
+    </div>
   </section>
 
-  <section>
-    <h2>Honest limits</h2>
-    <ul class="features">
-      <li>Understanding is extractive, not an LLM: precise on your words, no free-form reasoning yet (Evon next).</li>
-      <li>The noise benchmark uses labeled synthetic overlays until field recordings land.</li>
-      <li>Quiz verdicts and reminder read-backs stay Hinglish-first pending native Marathi review.</li>
-      <li>Single user, one machine: no accounts, no sync, nothing to leak.</li>
-    </ul>
-  </section>
-
+  <!-- Start in Two Minutes -->
   <section id="start">
-    <h2>Start in two minutes</h2>
-    <ol class="start">
-      <li>Copy <code>.env.example</code> to <code>.env</code> and paste a key from
-        <a href="https://app.gnani.ai/voice">app.gnani.ai/voice</a>.</li>
-      <li>Run <code>pip install -r requirements.txt</code>, then
-        <code>uvicorn server:app --host 127.0.0.1 --port 8000</code>.</li>
-      <li>Open <code>http://127.0.0.1:8000</code>, press the mic, and say “yaad rakhna…”.</li>
-    </ol>
+    <div class="wrap">
+      <div class="closing-card">
+        <span class="closing-kicker">Local Quick Start</span>
+        <h2>Run Remo in two minutes</h2>
+        <p class="closing-lead">Paste a key from <a href="https://app.gnani.ai/voice" target="_blank" rel="noopener">app.gnani.ai/voice</a> into <code>.env</code> and launch the studio locally.</p>
+        <pre class="code-box"><code>python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn server:app --host 127.0.0.1 --port 8000</code></pre>
+        <div class="closing-actions">
+          <a class="btn-primary" href="/">Open Web App</a>
+          <a class="btn-ghost" href="https://docs.gnani.ai" target="_blank" rel="noopener">Gnani Docs ↗</a>
+        </div>
+      </div>
+    </div>
   </section>
 </main>
 
-<footer class="wrap">
-  <p>Built solo for the Great Indian AI Internship Challenge 2026. Speech and voice by
-    <a href="https://gnani.ai">Gnani AI</a>.</p>
+<footer class="footer">
+  <div class="wrap footer-row">
+    <p>Built solo for the <strong>Great Indian AI Internship Challenge 2026</strong> · Speech &amp; voice by <a href="https://gnani.ai" target="_blank" rel="noopener">Gnani AI</a>.</p>
+    <p class="mono-foot">Prisma v2.5 · Timbre v2.5 · Local SQLite</p>
+  </div>
 </footer>
+
+<script>
+(() => {
+  const SCENES = {
+    save: {
+      title: "Keyword Auto-Save",
+      lang: "hi-IN · Prisma v2.5",
+      badge: "SAVED",
+      quote: "“Yaad rakhna, issue 214: login fix ho gaya, docs baaki hai.”",
+      reply: "Samajh gaya: 1 done, 1 baaki. Yaad kar liya.",
+      chips: '<span class="chip-ok">✓ login fix</span><span class="chip-pend">○ docs baaki</span>'
+    },
+    leftoff: {
+      title: "Left-Off Recall",
+      lang: "hi-IN · Timbre Nalini",
+      badge: "RECALL",
+      quote: "“Issue 214 mein kya bacha hai?”",
+      reply: "Issue 214 mein 1 cheez baaki hai: docs. Login fix ho gaya tha.",
+      chips: '<span class="chip-pend">○ Pending first</span><span class="chip-ok">✓ Spoken reply</span>'
+    },
+    welcome: {
+      title: "Welcome Back Briefing",
+      lang: "Watcher · GitHub Delta",
+      badge: "BRIEFING",
+      quote: "“Welcome back”",
+      reply: "Aapka 1 task baaki hai, aur python/cpython par 2 naye updates aaye hain.",
+      chips: '<span class="chip-pend">○ 1 pending</span><span class="chip-ok">↗ 2 fresh deltas</span>'
+    }
+  };
+  document.querySelectorAll(".win-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const s = SCENES[btn.dataset.scene];
+      if (!s) return;
+      document.querySelectorAll(".win-tab").forEach((b) => b.classList.toggle("active", b === btn));
+      document.getElementById("scene-title").textContent = s.title;
+      document.getElementById("scene-lang").textContent = s.lang;
+      document.getElementById("scene-badge").textContent = s.badge;
+      document.getElementById("scene-quote").textContent = s.quote;
+      document.getElementById("scene-reply").textContent = s.reply;
+      document.getElementById("scene-chips").innerHTML = s.chips;
+    });
+  });
+})();
+</script>
 </body>
 </html>

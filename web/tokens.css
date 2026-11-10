@@ -1,24 +1,119 @@
 :root {
-  --bg: #0e1214;
-  --surface: #161c1f;
-  --surface-2: #1e262a;
-  --surface-3: #263035;
-  --border: #2b3439;
-  --border-soft: #222b2f;
-  --text: #edf1f0;
-  --muted: #9aa7b4;
-  --faint: #6b7683;
-  --accent: #4cc9b0;
-  --accent-ink: #052927;
-  --accent-dim: rgba(76, 201, 176, 0.12);
-  --ok: #8aa86f;
-  --warn: #c9b458;
-  --bad: #d08a5e;
-  --listening: #d08a5e;
-  --thinking: #c9b458;
-  --speaking: #4cc9b0;
-  --radius: 10px;
-  --radius-sm: 7px;
-  --sans: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+
+  /* Cream Surfaces */
+  --bg: #faf5eb;
+  --bg-glow-1: rgba(110, 29, 49, 0.08);
+  --bg-glow-2: rgba(30, 86, 63, 0.09);
+  --surface: #fffdf8;
+  --surface-2: #f2eae0;
+  --surface-3: #e6dccd;
+  --glass: rgba(247, 241, 230, 0.88);
+
+  /* Warm Hairlines */
+  --border: rgba(43, 25, 29, 0.14);
+  --border-soft: rgba(43, 25, 29, 0.08);
+  --border-strong: rgba(43, 25, 29, 0.25);
+
+  /* Ink */
+  --text: #1e1416;
+  --text-soft: #463539;
+  --muted: #6e5b5f;
+  --faint: #978689;
+
+  /* Bordo (Wine / Bordeaux) */
+  --bordo: #6e1d31;
+  --bordo-strong: #87253e;
+  --bordo-depth: #480f1d;
+  --bordo-ink: #faf5eb;
+  --bordo-dim: rgba(110, 29, 49, 0.10);
+  --bordo-glow: rgba(110, 29, 49, 0.22);
+
+  /* Botanical Green */
+  --accent: #1e563f;
+  --accent-strong: #276d50;
+  --accent-depth: #113828;
+  --accent-ink: #faf5eb;
+  --accent-dim: rgba(30, 86, 63, 0.10);
+  --accent-glow: rgba(30, 86, 63, 0.22);
+
+  /* Semantic Status */
+  --ok: #1e563f;
+  --ok-dim: rgba(30, 86, 63, 0.11);
+  --warn: #8c4a1f;
+  --warn-dim: rgba(140, 74, 31, 0.11);
+  --bad: #87253e;
+  --bad-dim: rgba(135, 37, 62, 0.12);
+
+  /* Voice States */
+  --listening: #87253e;
+  --listening-glow: rgba(135, 37, 62, 0.26);
+  --thinking: #8c4a1f;
+  --speaking: #1e563f;
+
+  /* Shadows & Radii */
+  --shadow-card: 0 1px 2px rgba(43, 25, 29, 0.05), 0 10px 26px -16px rgba(43, 25, 29, 0.14);
+  --shadow-lift: 0 16px 38px -16px rgba(43, 25, 29, 0.22);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+
+  /* Typography */
+  --display: "Bricolage Grotesque", "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Deep Espresso-Bordo Dark Surfaces */
+  --bg: #150e10;
+  --bg-glow-1: rgba(155, 48, 75, 0.14);
+  --bg-glow-2: rgba(54, 134, 98, 0.11);
+  --surface: #1d1417;
+  --surface-2: #261b1f;
+  --surface-3: #312328;
+  --glass: rgba(25, 16, 19, 0.88);
+
+  --border: rgba(250, 245, 235, 0.13);
+  --border-soft: rgba(250, 245, 235, 0.075);
+  --border-strong: rgba(250, 245, 235, 0.24);
+
+  /* Warm Cream Ink */
+  --text: #faf5eb;
+  --text-soft: #dfd5c8;
+  --muted: #b0a19a;
+  --faint: #7c6d68;
+
+  /* Bordo */
+  --bordo: #c95671;
+  --bordo-strong: #db6f88;
+  --bordo-depth: #6e1d31;
+  --bordo-ink: #faf5eb;
+  --bordo-dim: rgba(201, 86, 113, 0.16);
+  --bordo-glow: rgba(201, 86, 113, 0.28);
+
+  /* Green */
+  --accent: #4fb286;
+  --accent-strong: #68c99e;
+  --accent-depth: #1e563f;
+  --accent-ink: #0c2419;
+  --accent-dim: rgba(79, 178, 134, 0.14);
+  --accent-glow: rgba(79, 178, 134, 0.24);
+
+  --ok: #68c99e;
+  --ok-dim: rgba(104, 201, 158, 0.14);
+  --warn: #deb068;
+  --warn-dim: rgba(222, 176, 104, 0.15);
+  --bad: #db6f88;
+  --bad-dim: rgba(219, 111, 136, 0.16);
+
+  --listening: #db6f88;
+  --listening-glow: rgba(219, 111, 136, 0.28);
+  --thinking: #deb068;
+  --speaking: #4fb286;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 10px 26px -14px rgba(0, 0, 0, 0.55);
+  --shadow-lift: 0 14px 36px -12px rgba(0, 0, 0, 0.65);
 }

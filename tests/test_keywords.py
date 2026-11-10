@@ -20,6 +20,8 @@ from remo.brain_keywords import (
         ("याद रखना गणित में काम बाकी है", "गणित में काम बाकी है"),
         ("lakshat thev, ganitat kaam baki aahe", "ganitat kaam baki aahe"),
         ("लक्षात ठेव गणितात काम बाकी आहे", "गणितात काम बाकी आहे"),
+        ("रिमेम्बर मुझे कल नये प्रोजेक्ट पर काम करना है", "मुझे कल नये प्रोजेक्ट पर काम करना है"),
+        ("रिमेंबर आई हैव टू वर्क अपॉन अ प्रोजेक्ट टुमॉरो", "आई हैव टू वर्क अपॉन अ प्रोजेक्ट टुमॉरो"),
     ],
 )
 def test_save_keyword_returns_original_case_content(said: str, expected: str) -> None:

@@ -80,3 +80,47 @@ def test_answer_without_time_or_reminder(mem: Memory) -> None:
     say = R.compose_answer(hits, mem)
     assert "Aapne kaha tha" in say and "atta" in say
     assert R.compose_answer([], mem) == R.compose_recall([])
+
+
+def test_unrelated_query_returns_no_hits(mem: Memory) -> None:
+    assert R.hybrid_search(mem, "sahara desert camel safari") == []
+
+
+def test_long_note_does_not_shadow_relevant_short_note(tmp_path: Path) -> None:
+    m = Memory(tmp_path / "remo.db")
+    m.add_note(
+        "maine jo abhi project banaya hai uska UI bahut weak hai, mujhe use update karna hai"
+        " lekin main 2 din baad karunga, bahut saara vistaar se varnan taaki ye note lamba lage"
+    )
+    m.add_note("differential equations baaki hai")
+    hits = R.hybrid_search(m, "differential ka kya haal hai?")
+    assert hits and "differential" in hits[0].text
+    assert all("project" not in h.text for h in hits[:1])
+    m.close()
+
+
+def test_tell_all_lists_recent_notes(mem: Memory) -> None:
+    assert R.is_tell_all_query("kya yaad hai?") is True
+    assert R.is_tell_all_query("differential ka kya haal hai?") is False
+    say = R.compose_recall(mem.list_recent(3))
+    assert "Mujhe ye mila" in say
+
+
+def test_latin_query_finds_devanagari_note(tmp_path: Path) -> None:
+    m = Memory(tmp_path / "remo.db")
+    m.add_note("मुझे कल घर की सफाई करनी है।")
+    m.add_note("live server check ho gaya")
+    hits = R.hybrid_search(m, "kal ghar ki safai krni hai?")
+    assert hits and "सफाई" in hits[0].text
+    hits = R.hybrid_search(m, "mujhe kal kya krna hai")
+    assert hits and "सफाई" in hits[0].text
+    m.close()
+
+
+def test_devanagari_pending_note_composes_pending_tail(tmp_path: Path) -> None:
+    m = Memory(tmp_path / "remo.db")
+    m.add_note("मुझे कल नये प्रोजेक्ट पर काम करना है")
+    say = R.compose_answer(m.list_recent(1), m)
+    assert "baaki hai" in say
+    assert "Mujhe ye mila" not in say
+    m.close()

@@ -1,15 +1,17 @@
 """Local-first memory: notes, work entries, reminders, and learned lists.
 
 SQLite holds every table; notes are also stored in a Latin transliteration plus
-a meaning vector so "maths" can find "मैथ्स". Vectors come from a tiny offline
+a meaning vector so "kal" can find "कल". Vectors come from a tiny offline
 hashed embedder , no network, deterministic , behind a swappable interface.
-Full-text search uses FTS5 when the local SQLite has it, else LIKE.
+Keyword search is token overlap over both scripts with stopwords dropped, so a
+query only matches notes it actually shares words with.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import math
+import re
 import sqlite3
 import struct
 import time
@@ -18,12 +20,7 @@ from pathlib import Path
 
 EMBED_DIM = 256
 
-_DEVA_TO_LATIN = {
-    "अ": "a", "आ": "aa", "इ": "i", "ई": "ee", "उ": "u", "ऊ": "oo",
-    "ए": "e", "ऐ": "ai", "ओ": "o", "औ": "au",
-    "ा": "aa", "ि": "i", "ी": "ee", "ु": "u", "ू": "oo",
-    "े": "e", "ै": "ai", "ो": "o", "ौ": "au",
-    "ं": "n", "ँ": "n", "ः": "h", "्": "", "़": "",
+_DEVA_BASE = {
     "क": "k", "ख": "kh", "ग": "g", "घ": "gh", "ङ": "ng",
     "च": "ch", "छ": "chh", "ज": "j", "झ": "jh", "ञ": "ny",
     "ट": "t", "ठ": "th", "ड": "d", "ढ": "dh", "ण": "n",
@@ -31,20 +28,145 @@ _DEVA_TO_LATIN = {
     "प": "p", "फ": "ph", "ब": "b", "भ": "bh", "म": "m",
     "य": "y", "र": "r", "ल": "l", "व": "v",
     "श": "sh", "ष": "sh", "स": "s", "ह": "h",
-    "०": "0", "१": "1", "२": "2", "३": "3", "४": "4",
-    "५": "5", "६": "6", "७": "7", "८": "8", "९": "9",
-    "।": ".", "॥": "..",
 }
 
-# Nukta consonants are two code points; fold them before the char-by-char pass.
-_NUKTA_FOLD = {"क़": "q", "ख़": "kh", "ग़": "gh", "ज़": "z", "ड़": "d", "ढ़": "dh", "फ़": "f"}
+_DEVA_SIGNS = {
+    "अ": "a", "आ": "aa", "इ": "i", "ई": "ee", "उ": "u", "ऊ": "oo",
+    "ए": "e", "ऐ": "ai", "ओ": "o", "औ": "au",
+    "ा": "aa", "ि": "i", "ी": "ee", "ु": "u", "ू": "oo",
+    "े": "e", "ै": "ai", "ो": "o", "ौ": "au",
+    "ं": "n", "ँ": "n", "ः": "h",
+}
+
+_DEVA_OTHER = {
+    "०": "0", "१": "1", "२": "2", "३": "3", "४": "4",
+    "५": "5", "६": "6", "७": "7", "८": "8", "९": "9",
+    "।": ".", "॥": "..", "्": "", "़": "",
+}
+
+# Nukta consonants are two code points; the loop reads consonant + nukta as one.
+_NUKTA_BASE = {"क": "q", "ख": "kh", "ग": "gh", "ज": "z", "ड": "d", "ढ": "dh", "फ": "f"}
+
+_VOWELS = frozenset("aeiou")
+
+
+def _delete_schwa(word: str) -> str:
+    """Hindi schwa deletion, simplified: final 'a' after a consonant goes, and
+    a medial 'a' in an open syllable (consonant + 'a' + consonant + vowel) goes
+    everywhere except the first syllable. Long 'aa' is never touched."""
+    if len(word) > 2 and word.endswith("a") and word[-2] not in _VOWELS:
+        word = word[:-1]
+    res: list[str] = []
+    seen_vowel = False
+    n = len(word)
+    for i, c in enumerate(word):
+        if c in _VOWELS:
+            medial = (
+                c == "a"
+                and seen_vowel
+                and i > 0
+                and word[i - 1] not in _VOWELS
+                and i + 2 < n
+                and word[i + 1] not in _VOWELS
+                and word[i + 2] in _VOWELS
+            )
+            if not medial:
+                res.append(c)
+            seen_vowel = True
+        else:
+            res.append(c)
+    return "".join(res)
+
+
+def _transliterate_word(word: str) -> str:
+    """One word: consonants carry inherent 'a' unless a halant kills it or a
+    matra replaces it; nukta consonants map to their Urdu sounds."""
+    out: list[str] = []
+    i, n = 0, len(word)
+    while i < n:
+        ch = word[i]
+        if ch in _DEVA_BASE:
+            base = _DEVA_BASE[ch]
+            j = i + 1
+            if j < n and word[j] == "़":
+                base = _NUKTA_BASE.get(ch, base)
+                j += 1
+            if j < n and word[j] == "्":
+                out.append(base)
+                i = j + 1
+                continue
+            if j < n and word[j] in _DEVA_SIGNS:
+                out.append(base)
+                i = j
+                continue
+            out.append(base + "a")
+            i = j
+            continue
+        out.append(_DEVA_SIGNS.get(ch, _DEVA_OTHER.get(ch, ch)))
+        i += 1
+    return _delete_schwa("".join(out))
 
 
 def transliterate_latin(text: str) -> str:
-    """Rough Devanagari→Latin fold (no schwa deletion). Latin passes through."""
-    for combo, latin in _NUKTA_FOLD.items():
-        text = text.replace(combo, latin)
-    return "".join(_DEVA_TO_LATIN.get(ch, ch) for ch in text)
+    """Devanagari→Latin with inherent vowels and schwa deletion.
+
+    Only words containing Devanagari are touched, so Latin spellings pass
+    through byte-identical: कल→kal, घर→ghar, नमस्ते→namaste.
+    """
+    parts = re.split(r"(\s+)", text)
+    for k, part in enumerate(parts):
+        if part and not part.isspace() and any("\u0900" <= c <= "\u097f" for c in part):
+            parts[k] = _transliterate_word(part)
+    return "".join(parts)
+
+
+# Function words that carry no topic: dropped before overlap scoring so they
+# can never match a note by themselves. Content words stay, in every language.
+_STOPWORDS = frozenset(
+    """
+    mujhe mujhko mujhse main mein mene maine hum hamari hamare tum tumhe tumhara
+    aap aapko ye yeh is iss us uss woh wo vo ka ke ki ko se par per tak ne bhi
+    bhee hi hee toh to aur ya lekin hai hain tha thi the ho hoga hogi hoge honge
+    hua hui hue hona hone hota hoti hote hu hun hoon raha rahi rahe kya kab kaun
+    kis kisko kitna kitne kitni kaise kyon kyun kahan kidhar kyu batao bata sunao
+    suna bolo bol jara zara bhi han man aaj liye abhi
+    what when where which who whom whose why how the a an is are was were be been
+    being to of and or in on for with at by from as that this these those it its i
+    me my mine you your yours he him his she her we us our they them their have
+    has had having do does did doing will would shall should can could may might
+    must not no yes so very just now about into over after before up upon out also too
+    some any more most other such than then there here
+    mala maza majha majhya tumhi tumcha aamhi aamcha he hi ha hya tya te ti to kay
+    kevha kuthe kon konala kasa kashi kase kiti aani ahe aahe aahet hota hoti hote
+    hoto sanga sang
+    """.split()
+)
+
+
+# Spelling bridges, applied to both sides before matching: सफाई/ph meets
+# safai/f, वाला/v meets wala/w, की/kee meets ki, चाय/chaay meets chai.
+_LOOSE_FOLD = (("ph", "f"), ("w", "v"), ("aa", "a"), ("ee", "i"), ("oo", "u"), ("ay", "ai"))
+
+
+def _loose(tok: str) -> str:
+    for old, new in _LOOSE_FOLD:
+        tok = tok.replace(old, new)
+    return tok
+
+
+def content_tokens(text: str) -> list[str]:
+    """Topic tokens: Devanagari folded to Latin, spellings bridged, stopwords
+    dropped. Digits always count ("2 din baad"); alpha tokens need 2+ letters
+    so bare "a"/"e" cannot match. Same function on both sides keeps
+    cross-script matching exact.
+    """
+    out: list[str] = []
+    for tok in re.findall(r"[a-z0-9]+", transliterate_latin(text).lower()):
+        if tok.isdigit() or len(tok) >= 2:
+            folded = _loose(tok)
+            if folded not in _STOPWORDS:
+                out.append(folded)
+    return out
 
 
 class HashEmbedder:
@@ -190,32 +312,12 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 """
 
-_FTS_SCHEMA = """
-CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-    text, text_latin, content='notes', content_rowid='id', tokenize='unicode61'
-);
-CREATE TRIGGER IF NOT EXISTS notes_ai AFTER INSERT ON notes BEGIN
-    INSERT INTO notes_fts(rowid, text, text_latin)
-    VALUES (new.id, new.text, new.text_latin);
-END;
-CREATE TRIGGER IF NOT EXISTS notes_ad AFTER DELETE ON notes BEGIN
-    INSERT INTO notes_fts(notes_fts, rowid, text, text_latin)
-    VALUES ('delete', old.id, old.text, old.text_latin);
-END;
-"""
-
-
 class Memory:
     def __init__(self, path: Path | str = ":memory:", embedder: HashEmbedder | None = None) -> None:
         # One connection per request; never shared across threads without care.
         self.db = sqlite3.connect(str(path), check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(_SCHEMA)
-        try:
-            self.db.executescript(_FTS_SCHEMA)
-            self.fts = True
-        except sqlite3.OperationalError:
-            self.fts = False
         self.embedder = embedder or HashEmbedder()
 
     def close(self) -> None:
@@ -255,26 +357,28 @@ class Memory:
         self.forget_note(note.id)
         return note
 
+    def token_hits(self, query: str, limit: int = 10) -> list[tuple[Note, int]]:
+        """Notes sharing topic tokens with the query, with overlap counts.
+
+        Ranked by distinct shared tokens (more first), ties broken by recency.
+        A query with no shared tokens matches nothing, whatever the wording.
+        """
+        wanted = set(content_tokens(query))
+        if not wanted:
+            return []
+        scored: list[tuple[Note, int]] = []
+        for row in self.db.execute("SELECT * FROM notes").fetchall():
+            note = self._note_from(row)
+            have = set(content_tokens(f"{note.text} {note.text_latin}"))
+            overlap = len(wanted & have)
+            if overlap:
+                scored.append((note, overlap))
+        scored.sort(key=lambda pair: (pair[1], pair[0].id), reverse=True)
+        return scored[:limit]
+
     def search_text(self, query: str, limit: int = 10) -> list[Note]:
-        """Keyword search over both scripts; LIKE fallback when FTS5 is missing."""
-        if self.fts:
-            phrase = '"' + query.replace('"', '""') + '"'
-            try:
-                rows = self.db.execute(
-                    "SELECT n.* FROM notes_fts f JOIN notes n ON n.id = f.rowid"
-                    " WHERE notes_fts MATCH ? LIMIT ?",
-                    (phrase, limit),
-                ).fetchall()
-                return [self._note_from(r) for r in rows]
-            except sqlite3.OperationalError:
-                pass
-        like = f"%{query}%"
-        rows = self.db.execute(
-            "SELECT * FROM notes WHERE text LIKE ? OR text_latin LIKE ?"
-            " ORDER BY id DESC LIMIT ?",
-            (like, like, limit),
-        ).fetchall()
-        return [self._note_from(r) for r in rows]
+        """Keyword search over both scripts, most shared tokens first."""
+        return [note for note, _ in self.token_hits(query, limit=limit)]
 
     def search_vector(self, query: str, limit: int = 10) -> list[tuple[Note, float]]:
         """Meaning search: cosine rank over stored embeddings."""

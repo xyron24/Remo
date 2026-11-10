@@ -138,6 +138,9 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
 
     hits = recall_mod.hybrid_search(mem, text, limit=3)
     if recall_mod.is_recall_query(text) or hits:
+        if not hits and recall_mod.is_tell_all_query(text):
+            recent = mem.list_recent(3)
+            return _speak(recall_mod.compose_recall(recent, s=s), "recall", settings, speak)
         return _speak(recall_mod.compose_answer(hits, mem, s=s), "recall", settings, speak)
     return _speak(s["help"], "help", settings, speak)
 

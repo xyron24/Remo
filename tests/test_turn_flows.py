@@ -74,7 +74,26 @@ def test_quiz_flow_start_answer_finish(mem: Memory) -> None:
     from remo import quiz as quiz_mod
 
     session = quiz_mod.QuizSession.from_dict((asked.pending or {}).get("session", {}))
+    assert session.note_ids and session.total == 1  # only the maths note is on-topic
     answered = turn.answer_quiz(mem, asked.pending, session.blank, settings=_settings(), speak=False)
     assert "Sahi jawab" in answered.text
-    finished = turn.answer_quiz(mem, answered.pending, "bas", settings=_settings(), speak=False)
-    assert finished.action == "quiz_done" and "Score:" in finished.text
+    assert answered.action == "quiz_done" and "Score: 1/1" in answered.text
+    assert answered.pending is None
+
+
+def test_devanagari_remember_saves_end_to_end(mem: Memory) -> None:
+    result = _run("रिमेम्बर मुझे कल नये प्रोजेक्ट पर काम करना है", mem)
+    assert result.action == "saved"
+    assert "Yaad kar liya" in result.text
+    assert "नये प्रोजेक्ट" in mem.list_recent(1)[0].text
+
+
+def test_recall_answers_each_question_from_its_own_note(mem: Memory) -> None:
+    _run("yaad rakhna live server check ho gaya", mem)
+    _run("yaad rakhna differential equations baaki hai", mem)
+    first = _run("differential ka kya haal hai?", mem)
+    assert "differential" in first.text
+    assert "live server" not in first.text
+    second = _run("server ka kya hua?", mem)
+    assert "live server" in second.text
+    assert "differential" not in second.text

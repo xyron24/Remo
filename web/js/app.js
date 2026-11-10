@@ -1,4 +1,4 @@
-/* Remo app shell: routing, voice widget, pages, toasts. Vanilla JS. */
+/* Remo app shell: routing, voice studio widget, inline audio player, pages. Vanilla JS. */
 (() => {
   const $ = (id) => document.getElementById(id);
   const API = window.RemoAPI;
@@ -6,13 +6,16 @@
   const store = {
     lang: localStorage.getItem("remo-lang") || "hi-IN",
     autoplay: localStorage.getItem("remo-autoplay") !== "off",
+    theme: localStorage.getItem("remo-theme") || "light",
     pending: null,
     cache: null,
-    briefSpoken: null,
+    activePill: null,
   };
   const LANG_NAME = { "hi-IN": "Hinglish", "mr-IN": "Marathi" };
+  const SPEAKER_NAME = { "hi-IN": "Nalini", "mr-IN": "Zahira" };
   const player = new Audio();
-  let speaking = false;
+  let homeVoice = null;
+  let askVoice = null;
 
   /* ---------- helpers ---------- */
   function esc(s) {
@@ -21,6 +24,9 @@
   }
   function fmtTime(ts) {
     return new Date(ts * 1000).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  }
+  function cssVar(name, fallback) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
   }
   function toast(text, err) {
     const box = $("toasts");
@@ -34,12 +40,47 @@
   function setSide(state, label) {
     $("side-dot").className = `dot ${state}`;
     $("side-status").textContent = label;
+    const mark = document.querySelector(".mark");
+    if (mark) {
+      mark.style.background = state === "speaking"
+        ? cssVar("--accent", "#1e563f")
+        : state === "thinking"
+          ? cssVar("--thinking", "#8c4a1f")
+          : cssVar("--bordo", "#6e1d31");
+    }
   }
-  function play(url, done) {
-    if (!url || !store.autoplay) { done && done(); return; }
-    speaking = true;
+  function clearActivePill() {
+    if (store.activePill) {
+      store.activePill.classList.remove("playing");
+      const useEl = store.activePill.querySelector(".audio-play use");
+      if (useEl) useEl.setAttribute("href", "#i-play");
+      store.activePill = null;
+    }
+  }
+  function play(url, done, pillEl) {
+    if (!url) { done && done(); return; }
+    if (!pillEl && !store.autoplay) { done && done(); return; }
+
+    // Toggle off if clicking currently playing pill
+    if (pillEl && store.activePill === pillEl && !player.paused) {
+      player.pause();
+      clearActivePill();
+      return;
+    }
+
+    clearActivePill();
+    if (pillEl) {
+      store.activePill = pillEl;
+      pillEl.classList.add("playing");
+      const useEl = pillEl.querySelector(".audio-play use");
+      if (useEl) useEl.setAttribute("href", "#i-pause");
+    }
+
     player.src = url;
-    const end = () => { speaking = false; done && done(); };
+    const end = () => {
+      clearActivePill();
+      done && done();
+    };
     player.onended = end;
     player.onerror = end;
     player.play().catch(end);
@@ -47,9 +88,12 @@
 
   /* ---------- router ---------- */
   const PAGES = ["home", "ask", "memories", "work", "reminders", "watchlist", "briefing", "voice", "settings"];
+  function activePage() {
+    const raw = location.hash.replace("#/", "").split("?")[0] || "home";
+    return PAGES.includes(raw) ? raw : "home";
+  }
   function route() {
-    const name = (location.hash.replace("#/", "") || "home").split("?")[0];
-    const page = PAGES.includes(name) ? name : "home";
+    const page = activePage();
     PAGES.forEach((p) => { $(`page-${p}`).hidden = p !== page; });
     document.querySelectorAll(".side-nav a").forEach((a) => {
       a.classList.toggle("active", a.dataset.page === page);
@@ -60,7 +104,39 @@
   }
   window.addEventListener("hashchange", route);
 
-  /* ---------- threads ---------- */
+  /* ---------- threads & inline player ---------- */
+  const BAR_HEIGHTS = [38, 65, 90, 52, 78, 96, 62, 44, 84, 72, 48, 88, 66, 36];
+  function buildAudioPill(url) {
+    const pill = document.createElement("div");
+    pill.className = "audio-pill";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "audio-play";
+    btn.setAttribute("aria-label", "Play or pause voice reply");
+    btn.innerHTML = `<svg><use href="#i-play"/></svg>`;
+
+    const bars = document.createElement("div");
+    bars.className = "audio-bars";
+    bars.setAttribute("aria-hidden", "true");
+    BAR_HEIGHTS.forEach((h) => {
+      const i = document.createElement("i");
+      i.style.height = `${h}%`;
+      bars.appendChild(i);
+    });
+
+    const meta = document.createElement("span");
+    meta.className = "audio-meta";
+    meta.textContent = `Timbre · ${SPEAKER_NAME[store.lang] || "Nalini"}`;
+
+    pill.appendChild(btn);
+    pill.appendChild(bars);
+    pill.appendChild(meta);
+
+    btn.onclick = () => play(url, null, pill);
+    return pill;
+  }
+
   function pendingChips(data, box) {
     if (!data.pending || !["undo", "forget", "remind"].includes(data.pending.action)) return;
     const row = document.createElement("div");
@@ -76,29 +152,46 @@
     box.appendChild(row);
   }
 
+  const ACTION_LABELS = {
+    saved: "saved",
+    recall: "recall",
+    briefing: "briefing",
+    plan: "day plan",
+    remind_ask: "confirm",
+    remind_set: "reminder",
+    quiz_ask: "quiz",
+    quiz_grade: "quiz",
+    watch: "watching",
+    undo_ask: "confirm",
+    forget_ask: "confirm",
+    undone: "undone",
+    repeat: "repeat",
+  };
+
   function addTurn(box, who, text, data) {
     const div = document.createElement("div");
     div.className = `turn${who === "You" ? " you" : ""}`;
-    let html = `<div class="who">${who}</div><p>${esc(text)}</p>`;
+
+    const tag = data && data.action && ACTION_LABELS[data.action]
+      ? `<span class="action-tag${data.action.includes("ask") || data.action === "repeat" ? " warn" : ""}">${esc(ACTION_LABELS[data.action])}</span>`
+      : "";
+
+    let html = `<div class="turn-head"><div class="who">${who}</div>${tag}</div><p>${esc(text)}</p>`;
     if (data && data.links && data.links.length) {
       html += `<div class="links">${data.links.map((l) =>
-        `<a href="${esc(l)}" target="_blank" rel="noopener">source</a>`).join("")}</div>`;
+        `<a href="${esc(l)}" target="_blank" rel="noopener">${esc(shortUrl(l))} ↗</a>`).join("")}</div>`;
     }
     div.innerHTML = html;
+
+    let pill = null;
     if (data && data.audio_url) {
-      const row = document.createElement("div");
-      row.className = "row";
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "chip";
-      b.textContent = "replay voice";
-      b.onclick = () => play(data.audio_url);
-      row.appendChild(b);
-      div.appendChild(row);
+      pill = buildAudioPill(data.audio_url);
+      div.appendChild(pill);
     }
     if (data) pendingChips(data, div);
     box.prepend(div);
     while (box.children.length > 30) box.lastChild.remove();
+    return pill;
   }
 
   async function submitText(text, box, opts = {}) {
@@ -110,49 +203,67 @@
       store.pending = data.pending || null;
       showPendingChip();
       addTurn(box, "You", value, null);
-      addTurn(box, "Remo", data.text, data);
-      if (!opts.quiet) play(data.audio_url, refresh);
-      else refresh();
+      const pill = addTurn(box, "Remo", data.text, data);
+      if (!opts.quiet && store.autoplay && data.audio_url) {
+        setSide("speaking", "Speaking");
+        play(data.audio_url, () => { setSide("ready", "Ready"); refresh(); }, pill);
+      } else {
+        refresh();
+        setSide("ready", "Ready");
+      }
     } catch (err) {
       toast(`Send failed: ${err.message}`, true);
-    } finally {
-      setSide("ready", "Ready");
+      setSide("bad", "Error");
     }
   }
 
   function showPendingChip() {
     const el = $("v-pending");
     if (!store.pending || !store.pending.action) { el.hidden = true; return; }
-    const labels = { undo: "waiting: forget last? (haan / nahi)", forget: "waiting: forget this? (haan / nahi)",
-      remind: "waiting: arm reminder? (haan / nahi)", remind_ask: "waiting: what for?",
-      quiz: "quiz live: answer or say bas" };
+    const labels = {
+      undo: "waiting: forget last? (haan / nahi)",
+      forget: "waiting: forget this? (haan / nahi)",
+      remind: "waiting: arm reminder? (haan / nahi)",
+      remind_ask: "waiting: what for?",
+      quiz: "quiz live: answer or say bas",
+    };
     el.textContent = labels[store.pending.action] || "waiting";
     el.hidden = false;
   }
 
-  /* ---------- voice widget (home + ask share the engine) ---------- */
-  function makeVoice({ micBtn, stateEl, timerEl, heardEl, waveEl, box, autoPlay = true }) {
+  /* ---------- voice widget ---------- */
+  function makeVoice({ micBtn, cardEl, stateEl, timerEl, heardEl, waveEl, box, autoPlay = true }) {
     const session = window.RemoVoice.createSession({
-      onLevel: (data) => drawWave(waveEl, data),
+      onLevel: (data) => drawWave(waveEl, data, true),
       onDone: async (wav) => {
         stopTimer();
-        setState("processing", "Thinking");
+        if (cardEl) cardEl.classList.remove("is-live");
+        idleWave(waveEl);
+        setState("processing", "Thinking…");
         setSide("thinking", "Thinking");
         try {
           const data = await API.turnAudio(wav, store.lang, store.pending);
           store.pending = data.pending || null;
           showPendingChip();
           if (data.transcript) {
-            heardEl.textContent = `Heard: ${data.transcript}`;
+            heardEl.textContent = `Heard: "${data.transcript}"`;
             heardEl.hidden = false;
             addTurn(box, "You", data.transcript, null);
           }
-          addTurn(box, "Remo", data.text, data);
+          const pill = addTurn(box, "Remo", data.text, data);
           setState("responding", "Here is what I found");
           setSide("speaking", "Speaking");
-          const end = () => { setState("idle", "Tap to talk to Remo"); setSide("ready", "Ready"); refresh(); };
-          if (autoPlay && store.autoplay) play(data.audio_url, end);
-          else { end(); if (data.audio_url && !store.autoplay) toast("Reply ready (autoplay is off)"); }
+          const end = () => {
+            setState("idle", "Tap the mic or press Space to talk");
+            setSide("ready", "Ready");
+            refresh();
+          };
+          if (autoPlay && store.autoplay && data.audio_url) {
+            play(data.audio_url, end, pill);
+          } else {
+            end();
+            if (data.audio_url && !store.autoplay) toast("Reply ready (autoplay is off)");
+          }
         } catch (err) {
           setState("error", `Could not reach Remo (${err.message})`);
           setSide("bad", "Error");
@@ -161,6 +272,8 @@
       },
       onError: (err) => {
         stopTimer();
+        if (cardEl) cardEl.classList.remove("is-live");
+        idleWave(waveEl);
         setState("error", `Recording failed (${err.message})`);
         setSide("bad", "Error");
       },
@@ -170,6 +283,7 @@
     function startTimer() {
       timer = 0;
       timerEl.hidden = false;
+      timerEl.textContent = "0:00";
       timerInt = setInterval(() => {
         timer += 1;
         timerEl.textContent = `${Math.floor(timer / 60)}:${String(timer % 60).padStart(2, "0")}`;
@@ -187,7 +301,8 @@
       try {
         await session.start();
         startTimer();
-        setState("listening", "I am listening");
+        if (cardEl) cardEl.classList.add("is-live");
+        setState("listening", "Listening… tap mic or press Space when done");
         setSide("listening", "Listening");
       } catch (err) {
         setState("error", `Microphone blocked (${err.message})`);
@@ -198,30 +313,50 @@
     return { toggle };
   }
 
-  const ACCENT = "#4cc9b0", TRACK = "#222b2f";
-  function drawWave(canvas, data) {
-    if (!canvas) return;
+  /* ---------- crisp capsule waveform canvas ---------- */
+  function prepCanvas(canvas) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(240, Math.round(rect.width || 520));
+    const h = Math.max(48, Math.round(rect.height || 60));
+    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+    }
     const ctx = canvas.getContext("2d");
-    const W = canvas.width, H = canvas.height;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, W: w, H: h };
+  }
+
+  function roundPill(ctx, x, y, w, h) {
+    const r = Math.min(w / 2, h / 2);
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h);
+    ctx.fill();
+  }
+
+  function drawWave(canvas, data, live) {
+    if (!canvas) return;
+    const { ctx, W, H } = prepCanvas(canvas);
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = ACCENT;
-    const n = 56, bw = W / n;
+    ctx.fillStyle = live ? cssVar("--listening", "#87253e") : cssVar("--accent", "#1e563f");
+    const n = 52, gap = W / n, bw = Math.max(3, gap * 0.48);
     for (let i = 0; i < n; i++) {
       const v = data[Math.floor((i / n) * data.length * 0.7)] / 255;
-      const h = Math.max(3, v * (H - 10));
-      ctx.fillRect(i * bw + bw * 0.25, (H - h) / 2, bw * 0.5, h);
+      const h = Math.max(4, v * (H - 12));
+      roundPill(ctx, i * gap + (gap - bw) / 2, (H - h) / 2, bw, h);
     }
   }
+
   function idleWave(canvas) {
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    const W = canvas.width, H = canvas.height;
+    const { ctx, W, H } = prepCanvas(canvas);
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = TRACK;
-    const n = 56, bw = W / n;
+    ctx.fillStyle = cssVar("--border-strong", "rgba(43, 25, 29, 0.25)");
+    const n = 52, gap = W / n, bw = Math.max(3, gap * 0.44);
     for (let i = 0; i < n; i++) {
-      const h = 3 + 2 * Math.sin(i * 0.7);
-      ctx.fillRect(i * bw + bw * 0.25, (H - h) / 2, bw * 0.5, h);
+      const h = 4 + 4.5 * Math.abs(Math.sin(i * 0.38));
+      roundPill(ctx, i * gap + (gap - bw) / 2, (H - h) / 2, bw, h);
     }
   }
 
@@ -252,6 +387,7 @@
 
   function badge(id, n) {
     const el = $(id);
+    if (!el) return;
     if (n > 0) { el.textContent = n > 99 ? "99+" : String(n); el.hidden = false; }
     else el.hidden = true;
   }
@@ -266,14 +402,17 @@
     badge("badge-rem", s.reminders.length);
     badge("badge-watch", s.changes.filter((c) => !c.briefed).length);
 
+    const homeSeed = $("home-seed");
+    if (homeSeed) homeSeed.hidden = s.notes.length > 0 || s.work.length > 0;
+
     const act = $("activity");
     act.innerHTML = "";
     const items = [
-      ...s.notes.slice(0, 4).map((n) => ({ icon: "i-archive", text: n.text, meta: `saved ${fmtTime(n.created_at)}` })),
-      ...s.reminders.slice(0, 3).map((r) => ({ icon: "i-bell", text: r.text, meta: `fires ${r.when}` })),
-      ...s.changes.slice(0, 3).map((c) => ({ icon: "i-eye", text: c.summary, meta: "watcher update" })),
+      ...s.notes.slice(0, 4).map((n) => ({ text: n.text, meta: `memory · ${fmtTime(n.created_at)}` })),
+      ...s.reminders.slice(0, 3).map((r) => ({ text: r.text, meta: `alarm · ${r.when}` })),
+      ...s.changes.slice(0, 3).map((c) => ({ text: c.summary, meta: "watcher update" })),
     ].slice(0, 8);
-    if (!items.length) act.innerHTML = `<li class="empty">Quiet so far. Speak to Remo to begin.</li>`;
+    if (!items.length) act.innerHTML = `<li class="empty">Quiet so far. Click a sample phrase above or tap the mic to begin.</li>`;
     items.forEach((it) => {
       const li = document.createElement("li");
       li.innerHTML = `${esc(it.text)}<span class="meta">${esc(it.meta)}</span>`;
@@ -285,6 +424,7 @@
     renderReminders(s);
     renderWatch(s);
     renderContext(s);
+    renderLearned(s);
   }
 
   function renderMemories(s) {
@@ -301,15 +441,18 @@
 
   function renderWork(s) {
     const box = $("work-list");
-    box.innerHTML = s.work.length ? "" : `<div class="panel"><p class="empty">No work tracked. Speak a progress update to start.</p></div>`;
+    box.innerHTML = s.work.length ? "" : `<div class="panel"><p class="empty">No work tracked. Speak a progress update (e.g. “Yaad rakhna, issue 214: login fix ho gaya, docs baaki hai”).</p></div>`;
     s.work.forEach((w) => {
       const label = [w.org, w.issue_ref ? `issue ${w.issue_ref}` : ""].filter(Boolean).join(" ") || "general";
+      const total = w.done.length + w.pending.length;
+      const pct = total ? Math.round((w.done.length / total) * 100) : 0;
       const div = document.createElement("div");
       div.className = "panel";
       const pend = w.pending.map((p) => `<li class="pend-item">${esc(p)}</li>`).join("") || `<li class="empty">Nothing pending.</li>`;
       const done = w.done.map((d) => `<li class="done-item">${esc(d)}</li>`).join("") || `<li class="empty">Nothing done yet.</li>`;
-      div.innerHTML = `<h3>${esc(label)} <span class="muted small">${esc(w.persona)}</span></h3>
-        <ul class="rows">${pend}</ul><ul class="rows" style="margin-top:.5rem">${done}</ul>`;
+      div.innerHTML = `<h3>${esc(label)} <span class="persona-pill">${esc(w.persona)} · ${w.done.length}/${total} done</span></h3>
+        <div class="work-progress" aria-hidden="true"><i style="width:${pct}%"></i></div>
+        <ul class="rows">${pend}</ul><ul class="rows" style="margin-top:.55rem">${done}</ul>`;
       box.appendChild(div);
     });
   }
@@ -341,10 +484,25 @@
         ${fresh.some((c) => !c.briefed) ? `<span class="pill-new">new</span>` : ""}</h3>
         <p class="muted small">Last checked: ${w.checked_at ? esc(fmtTime(w.checked_at)) : "never"}</p>
         <ul class="rows">${fresh.length ? fresh.map((c) =>
-          `<li>${esc(c.summary)}<span class="meta"><a href="${esc(c.link)}" target="_blank" rel="noopener">open</a></span></li>`
+          `<li>${esc(c.summary)}<span class="meta"><a href="${esc(c.link)}" target="_blank" rel="noopener">open source ↗</a></span></li>`
         ).join("") : `<li class="empty">No changes recorded yet.</li>`}</ul>`;
       box.appendChild(div);
     });
+  }
+
+  function renderLearned(s) {
+    const wordsEl = $("learned-words");
+    const rulesEl = $("learned-rules");
+    if (!wordsEl || !rulesEl) return;
+    const learned = s.learned || {};
+    const words = learned.boost_words || [];
+    const rules = learned.fix_rules || [];
+    wordsEl.innerHTML = words.length
+      ? words.slice(0, 24).map((w) => `<span class="learned-chip">${esc(w)}</span>`).join("")
+      : `<span class="muted small">No custom boost words yet — save a few notes to populate.</span>`;
+    rulesEl.innerHTML = rules.length
+      ? `<strong>Fix rules:</strong> ` + rules.map(([a, b]) => `<code>${esc(a)} → ${esc(b)}</code>`).join(" ")
+      : "";
   }
 
   function shortUrl(url) {
@@ -371,7 +529,7 @@
     ch.innerHTML = fresh.length ? "" : `<li class="muted">No changes yet.</li>`;
     fresh.forEach((c) => {
       const li = document.createElement("li");
-      li.innerHTML = `${esc(c.summary)}<span class="meta"><a href="${esc(c.link)}" target="_blank" rel="noopener">open</a></span>`;
+      li.innerHTML = `${esc(c.summary)}<span class="meta"><a href="${esc(c.link)}" target="_blank" rel="noopener">open ↗</a></span>`;
       ch.appendChild(li);
     });
   }
@@ -392,7 +550,7 @@
         ? `<ul class="rows">${s.reminders.slice(0, 6).map((r) => `<li>${esc(r.text)}<span class="meta">${esc(r.when)}</span></li>`).join("")}</ul>`
         : `<p class="empty">No reminders armed.</p>`],
       ["Fresh updates", fresh.length
-        ? `<ul class="rows">${fresh.slice(0, 6).map((c) => `<li>${esc(c.summary)}<span class="meta"><a href="${esc(c.link)}" target="_blank" rel="noopener">open</a></span></li>`).join("")}</ul>`
+        ? `<ul class="rows">${fresh.slice(0, 6).map((c) => `<li>${esc(c.summary)}<span class="meta"><a href="${esc(c.link)}" target="_blank" rel="noopener">open ↗</a></span></li>`).join("")}</ul>`
         : `<p class="empty">Nothing new out there.</p>`],
       ["Suggested next action", next
         ? `<p>${esc(next.p)}</p>`
@@ -422,6 +580,16 @@
     $("ask-lang").textContent = LANG_NAME[code] || code;
     $("set-hi").classList.toggle("on", code === "hi-IN");
     $("set-mr").classList.toggle("on", code === "mr-IN");
+    if ($("v-lang-hi")) $("v-lang-hi").classList.toggle("on", code === "hi-IN");
+    if ($("v-lang-mr")) $("v-lang-mr").classList.toggle("on", code === "mr-IN");
+  }
+
+  function applyTheme(theme) {
+    store.theme = theme === "dark" ? "dark" : "light";
+    localStorage.setItem("remo-theme", store.theme);
+    if (store.theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
+    else document.documentElement.removeAttribute("data-theme");
+    idleWave($("v-wave"));
   }
 
   async function loadInfo() {
@@ -440,33 +608,40 @@
       const { alarms } = await API.alarms();
       for (const a of alarms || []) {
         toast(`Reminder: ${a.text}`);
-        addTurn($("thread-home"), "Remo", `Reminder: ${a.text}`, null);
+        const pill = addTurn($("thread-home"), "Remo", `Reminder: ${a.text}`, { action: "remind_set" });
         try {
           const { audio_url } = await API.speak(`Yaad dila raha hoon: ${a.text}`, store.lang);
-          play(audio_url, refresh);
+          play(audio_url, refresh, pill);
         } catch { /* stay silent on speak failure */ }
       }
       if ((alarms || []).length) refresh();
     } catch { /* ignore */ }
   }
 
+  function runBriefingAction() {
+    return submitText("welcome back", $("thread-home"));
+  }
+
   function init() {
     greeting();
+    applyTheme(store.theme);
     applyLang(store.lang === "mr-IN" ? "mr-IN" : "hi-IN");
     $("set-autoplay").checked = store.autoplay;
     route();
     idleWave($("v-wave"));
 
-    makeVoice({
+    homeVoice = makeVoice({
       micBtn: $("v-mic"),
+      cardEl: $("voice-card"),
       stateEl: $("v-state"),
       timerEl: $("v-timer"),
       heardEl: $("v-heard"),
       waveEl: $("v-wave"),
       box: $("thread-home"),
     });
-    makeVoice({
+    askVoice = makeVoice({
       micBtn: $("ask-mic"),
+      cardEl: null,
       stateEl: { set textContent(v) { toast(v); }, classList: { toggle() {} } },
       timerEl: { set hidden(v) {}, set textContent(v) {} },
       heardEl: { set hidden(v) {}, set textContent(v) {} },
@@ -498,6 +673,16 @@
         refresh();
       } catch (err) { toast(`Watch failed: ${err.message}`, true); }
     });
+    if ($("watch-check-btn")) {
+      $("watch-check-btn").onclick = async () => {
+        try {
+          const data = await API.turnText("koi update aaya?", store.lang, null);
+          toast(data.text);
+          if (data.audio_url) play(data.audio_url, refresh);
+          else refresh();
+        } catch (err) { toast(`Check failed: ${err.message}`, true); }
+      };
+    }
     $("brief-speak").onclick = async () => {
       try {
         const data = await API.turnText("welcome back", store.lang, null);
@@ -505,18 +690,40 @@
         play(data.audio_url, () => { refresh(); renderBriefing(); });
       } catch (err) { toast(`Briefing failed: ${err.message}`, true); }
     };
+    if ($("ctx-brief-btn")) $("ctx-brief-btn").onclick = runBriefingAction;
+
     $("set-hi").onclick = () => applyLang("hi-IN");
     $("set-mr").onclick = () => applyLang("mr-IN");
+    if ($("v-lang-hi")) $("v-lang-hi").onclick = () => applyLang("hi-IN");
+    if ($("v-lang-mr")) $("v-lang-mr").onclick = () => applyLang("mr-IN");
     $("set-autoplay").onchange = (e) => {
       store.autoplay = e.target.checked;
       localStorage.setItem("remo-autoplay", store.autoplay ? "on" : "off");
     };
-    $("seed").onclick = async () => {
+
+    const doSeed = async () => {
       try { await API.seed(); toast("Demo data loaded"); refresh(); }
       catch (err) { toast(`Seed failed: ${err.message}`, true); }
     };
+    $("seed").onclick = doSeed;
+    if ($("home-seed")) $("home-seed").onclick = doSeed;
+
+    if ($("try-chips")) {
+      $("try-chips").addEventListener("click", (e) => {
+        const btn = e.target.closest(".try-chip");
+        if (!btn) return;
+        const prompt = btn.dataset.prompt;
+        if (prompt) submitText(prompt, $("thread-home"));
+      });
+    }
+
+    if ($("theme-toggle")) {
+      $("theme-toggle").onclick = () => applyTheme(store.theme === "dark" ? "light" : "dark");
+    }
+
     $("collapse").onclick = () => {
       document.querySelector(".shell").classList.toggle("narrow");
+      setTimeout(() => idleWave($("v-wave")), 40);
     };
     $("menu-btn").onclick = () => {
       document.querySelector(".shell").classList.add("open");
@@ -526,6 +733,28 @@
       document.querySelector(".shell").classList.remove("open");
       $("scrim").hidden = true;
     };
+
+    // Spacebar / M push-to-toggle mic when not typing
+    window.addEventListener("keydown", (e) => {
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target && e.target.isContentEditable)) return;
+      if (e.code === "Space" || (e.key && e.key.toLowerCase() === "m" && !e.metaKey && !e.ctrlKey)) {
+        const page = activePage();
+        if (page === "home" && homeVoice) { e.preventDefault(); homeVoice.toggle(); }
+        else if (page === "ask" && askVoice) { e.preventDefault(); askVoice.toggle(); }
+      }
+    });
+
+    window.addEventListener("resize", () => idleWave($("v-wave")));
+
+    // Support ?say=... deep link from landing page
+    const params = new URLSearchParams(window.location.search);
+    const say = params.get("say");
+    if (say && $("v-text")) {
+      $("v-text").value = say;
+      $("v-text").focus();
+      toast("Phrase loaded — press Enter to run");
+    }
 
     skeleton($("activity"));
     refresh();

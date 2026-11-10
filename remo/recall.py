@@ -14,7 +14,8 @@ from remo.brain_keywords import normalize
 from remo.memory import Memory, Note
 
 _PENDING_PAT = re.compile(
-    r"baaki|baki|bacha|bache|left|pending|reh gay|karna hai|to[\s-]?do|adhur",
+    r"baaki|baki|bacha|bache|left|pending|reh gay|karna hai|to[\s-]?do|adhur"
+    r"|बाकी|बकि|बचा|बचे|करना|करनी|अधूर|रह ग|राहिल|करायच",
     re.IGNORECASE,
 )
 
@@ -68,17 +69,18 @@ _MAX_READ = 140
 
 
 def hybrid_search(mem: Memory, query: str, limit: int = 5) -> list[Note]:
-    """Keyword hits first, then meaning hits not already included."""
-    found: list[Note] = []
-    seen: set[int] = set()
-    for note in mem.search_text(query, limit=limit):
-        found.append(note)
-        seen.add(note.id)
-    for note, score in mem.search_vector(query, limit=limit):
-        if note.id not in seen and score > 0.1:
-            found.append(note)
-            seen.add(note.id)
-    return found[:limit]
+    """Token evidence first, trigram similarity only breaks ties.
+
+    A note must share at least one topic token with the query to be returned;
+    without that gate, raw trigram cosine ranks every note for every query and
+    every question gets the same answer.
+    """
+    keyed = mem.token_hits(query, limit=limit)
+    if not keyed:
+        return []
+    scores = {note.id: score for note, score in mem.search_vector(query, limit=len(keyed) + limit)}
+    keyed.sort(key=lambda pair: (pair[1], scores.get(pair[0].id, 0.0), pair[0].id), reverse=True)
+    return [note for note, _ in keyed[:limit]]
 
 
 def is_left_off_query(text: str) -> bool:
@@ -91,6 +93,35 @@ def is_recall_query(text: str) -> bool:
         return True
     words = set(normalize(text).split())
     return not words.isdisjoint(_QUESTION_WORDS)
+
+
+_TELL_ALL_MARKERS = (
+    "kya yaad hai",
+    "kya kya yaad hai",
+    "kya yaad kiya",
+    "kya yaad karwaya",
+    "sab batao",
+    "sab kuch batao",
+    "sab kuch sunao",
+    "sab sunao",
+    "what do you remember",
+    "what all do you remember",
+    "tell me everything",
+    "tell me all",
+    "repeat everything",
+    "repeat all",
+    "recap",
+    "kay lakshat thevla",
+    "sagla sang",
+    "sagla sanga",
+    "sarva sang",
+)
+
+
+def is_tell_all_query(text: str) -> bool:
+    """True for 'tell me everything you remember' with no topic."""
+    norm = normalize(text)
+    return any(marker in norm for marker in _TELL_ALL_MARKERS)
 
 
 def _short(text: str, limit: int = _MAX_READ) -> str:
