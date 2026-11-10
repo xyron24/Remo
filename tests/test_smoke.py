@@ -1,0 +1,38 @@
+"""Live smoke tests: Timbre speaks, Prisma listens (round-trip).
+
+Skipped automatically when GNANI_API_KEY is not set, so plain `pytest`
+stays green offline. Run live with:
+
+    pytest -m live
+"""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+
+from remo.config import load_settings
+
+pytestmark = pytest.mark.live
+
+needs_key = pytest.mark.skipif(
+    not os.environ.get("GNANI_API_KEY") and not Path(".env").exists(),
+    reason="GNANI_API_KEY not set (copy .env.example to .env)",
+)
+
+
+@needs_key
+def test_timbre_then_prisma_roundtrip(tmp_path: Path) -> None:
+    from scripts.smoke_prisma import transcribe
+    from scripts.smoke_timbre import synthesize
+
+    settings = load_settings()
+    assert settings.gnani_api_key, "GNANI_API_KEY must be set for live tests"
+
+    wav = tmp_path / "hello.wav"
+    size = synthesize("नमस्ते, मैं रेमो हूँ।", wav)
+    assert size > 1000, "TTS returned suspiciously little audio"
+
+    transcript = transcribe(wav, settings.language)
+    assert transcript.strip(), "STT returned an empty transcript"
