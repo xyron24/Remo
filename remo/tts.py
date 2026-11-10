@@ -1,7 +1,7 @@
 """Gnani Timbre voice-out: every reply spoken, one request at a time.
 
 Timbre allows a single active request, so all synthesis goes through one lock.
-Audio is cached on disk by content hash — repeated phrases cost nothing.
+Audio is cached on disk by content hash , repeated phrases cost nothing.
 """
 from __future__ import annotations
 

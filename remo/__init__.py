@@ -1,4 +1,4 @@
-"""Remo — speak once, remember forever.
+"""Remo , speak once, remember forever.
 
 A Hinglish + regional-language voice memory built on Gnani AI's Prisma (STT),
 Timbre (TTS), and Evon (reasoning).

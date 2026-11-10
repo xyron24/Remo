@@ -2,7 +2,7 @@
 
 Hinglish + Marathi ship fully translated across turns, recall, work-log, watcher,
 and briefing. Quiz verdicts and reminder read-backs stay Hinglish-first until a
-native speaker reviews them — they fall back automatically (never crash).
+native speaker reviews them , they fall back automatically (never crash).
 """
 from __future__ import annotations
 
@@ -24,9 +24,9 @@ HI = {
     "nothing_watched": "Abhi kuch watch nahi kar raha. 'Watch karo' ke baad link bolo.",
     "watching_ok": "Ho gaya, is par nazar rakhunga. 'Koi update' bolkar haal pucho.",
     "remind_done": "Ho gaya, waqt par yaad dila dunga.",
-    "remind_armed": "Ho gaya: {readback} — {task}.",
+    "remind_armed": "Ho gaya: {readback}, {task}.",
     "remind_confirm": "{readback}: {task}. Pakka?",
-    "forget_ask": "'{text}' — bhula doon?",
+    "forget_ask": "'{text}', bhula doon?",
     "left_off_none": "Abhi maine kuch yaad nahi kiya. 'Yaad rakhna' bolkar shuru karo.",
     "left_off_pending": "Ye baaki hai: {items}.",
     "left_off_extra": " Aur {n} purani baatein yaad hain.",
@@ -81,9 +81,9 @@ MR = {
     "nothing_watched": "Aata kahi watch karat nahi. 'Watch karo' nantar link sanga.",
     "watching_ok": "Zala, yavar laksh thevin. 'Kahi update' mhanoon vichara.",
     "remind_done": "Zala, velet aathvan karin.",
-    "remind_armed": "Zala: {readback} — {task}.",
+    "remind_armed": "Zala: {readback}, {task}.",
     "remind_confirm": "{readback}: {task}. Nakki?",
-    "forget_ask": "'{text}' — visru ka?",
+    "forget_ask": "'{text}', visru ka?",
     "left_off_none": "Aata mi kahi lakshat thevla nahi. 'Lakshat thev' mhanoon suruvat kara.",
     "left_off_pending": "He rahila aahe: {items}.",
     "left_off_extra": " Aani {n} junya goshti lakshat aahet.",

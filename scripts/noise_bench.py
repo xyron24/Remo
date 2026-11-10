@@ -1,7 +1,7 @@
 """Noise benchmark: fixtures -> noisy conditions -> Prisma -> WER report.
 
 First run synthesizes fixtures via Timbre (needs GNANI_API_KEY) into
-tests/noise/fixtures/ — committed small wavs + refs. Re-runs reuse them.
+tests/noise/fixtures/ , committed small wavs + refs. Re-runs reuse them.
 Transcribes each condition over REST (deterministic; the app streams live),
 then writes tests/noise/results.md + chart.svg.
 

@@ -4,7 +4,7 @@
 
 ### Speak once. Remember forever. Know what changed.
 
-**A Hinglish + Marathi voice memory that answers *where you left off* — and briefs *what changed while you were away*.**
+**A Hinglish + Marathi voice memory that answers *where you left off* and briefs *what changed while you were away*.**
 
 Runs on your machine · use it from any browser or phone
 
@@ -21,16 +21,16 @@ Runs on your machine · use it from any browser or phone
 
 </div>
 
-Remo listens the way Indians actually talk — Hinglish, English, or Marathi — and remembers what matters:
+Remo listens the way Indians actually talk (Hinglish, English, or Marathi) and remembers what matters:
 notes, work progress, reminders, and the outside world you asked it to watch. Days later, one question brings it all
 back, out loud:
 
-- **Keyword saving** — "yaad rakhna …" / "remember …" / "lakshat thev …" stores instantly. No interrogation.
-- **Left-off answers** — pending items first, with when you last spoke.
-- **Change watcher** — "watch karo" a GitHub issue or repo; "welcome back" briefs only what is new, with links.
-- **Spoken everything** — every reply, briefing, quiz, and alarm in a natural Timbre voice.
-- **Local-first** — notes, reminders, and keys stay on your machine. No Remo server exists.
-- **Learns your voice** — your vocabulary boosts recognition; stubborn mishearings become automatic fixes.
+- **Keyword saving:** "yaad rakhna …" / "remember …" / "lakshat thev …" stores instantly. No interrogation.
+- **Left-off answers:** pending items first, with when you last spoke.
+- **Change watcher:** "watch karo" a GitHub issue or repo; "welcome back" briefs only what is new, with links.
+- **Spoken everything:** every reply, briefing, quiz, and alarm in a natural Timbre voice.
+- **Local-first:** notes, reminders, and keys stay on your machine. No Remo server exists.
+- **Learns your voice:** your vocabulary boosts recognition; stubborn mishearings become automatic fixes.
 
 Supported platforms:
 
@@ -42,14 +42,14 @@ Supported platforms:
 
 ## Demo
 
-> The 60-second demo video lands here with the submission — posted on LinkedIn and X with
+> The 60-second demo video lands here with the submission, posted on LinkedIn and X with
 > `#GreatIndianAIInternshipChallenge` and `#GnaniAI`.
 
 ## What Remo does
 
 | Say this | What happens |
 |---|---|
-| "Yaad rakhna, maths mein integration ho gaya, differential baaki hai" | Stored instantly — "Yaad kar liya." |
+| "Yaad rakhna, maths mein integration ho gaya, differential baaki hai" | Stored instantly with a spoken confirmation. |
 | "Maths mein kya bacha hai?" | Pending-first answer, spoken out loud |
 | "Yaad rakhna, issue 214: login fix ho gaya, docs baaki hai" | Work entry tracked as done vs pending |
 | "Issue 214 mein kya bacha hai?" | Reads the entry back, weeks later |
@@ -62,12 +62,12 @@ Supported platforms:
 
 ## Powered by Gnani AI
 
-Every voice in Remo — both directions — runs on Gnani's models.
+Every voice in Remo, in both directions, runs on Gnani's models.
 
 | Model | How Remo uses it |
 |---|---|
 | **Prisma v2.5** (STT) | Realtime WebSocket streaming (1024-byte PCM, 300 ms silence gate) plus REST fallback; word boosting from your own notes; empty-result retry |
-| **Timbre v2.5** (TTS) | Every spoken reply, briefing, quiz, and alarm — Nalini for Hinglish, Zahira for Marathi; single-flight requests with a disk cache |
+| **Timbre v2.5** (TTS) | Every spoken reply, briefing, quiz, and alarm: Nalini for Hinglish, Zahira for Marathi; single-flight requests with a disk cache |
 | **Evon v3.3** (reasoning) | Next on the roadmap: today's understanding is extractive (no LLM in the loop), so recall works offline and deterministically |
 
 Get a key at [app.gnani.ai/voice](https://app.gnani.ai/voice) · Docs at [docs.gnani.ai](https://docs.gnani.ai) ·
@@ -108,15 +108,15 @@ then open **http://127.0.0.1:8000** in a browser, press the mic, and say "yaad r
 
 ## A day with Remo
 
-**Evening, two minutes.** You speak your progress — a GSoC update, a spray diary, the day's udhaar, a clinic visit.
+**Evening, two minutes.** You speak your progress: a GSoC update, a spray diary, the day's udhaar, a clinic visit.
 Remo files it as done vs pending. **Days later**, "kya bacha hai?" gets a pending-first answer with the last-update
-date. **Welcome back** adds what changed out there: new comments, merged PRs, shifted milestones — each with a link,
+date. **Welcome back** adds what changed out there: new comments, merged PRs, shifted milestones, each with a link,
 each announced with its as-of time so cached news is never presented as live.
 
 ## Architecture
 
 > TODO(user): paste the Excalidraw architecture diagram here as `assets/architecture.png` and replace this note with a
-> one-paragraph walkthrough. — Reminder: do NOT submit until this section is filled.
+> one-paragraph walkthrough. Reminder: do NOT submit until this section is filled.
 
 ## Noise benchmark
 
@@ -153,14 +153,14 @@ scripts/             smoke probes, voice probe, noise bench
 
 ## Languages
 
-Hinglish (Hindi + English, Devanagari + Latin) and Marathi ship end to end — replies, briefings, confirmations, and
+Hinglish (Hindi + English, Devanagari + Latin) and Marathi ship end to end: replies, briefings, confirmations, and
 watcher summaries. Quiz verdicts and reminder read-backs stay Hinglish-first until a native speaker reviews them.
 
 ## Privacy
 
 Your notes, work entries, reminders, keys, and learned words stay on your machine (`~/.remo`).
 Voice goes to Gnani for transcription, text goes to Gnani for speech. Watched URLs are polled as plain public
-requests — your notes never leave for them. The demo uses made-up data only.
+requests. Your notes never leave for them. The demo uses made-up data only.
 
 ## Roadmap
 
@@ -168,7 +168,7 @@ Live phone-call interface · PDF note imports · Evon-powered reasoning upgrades
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
 
 ---
 

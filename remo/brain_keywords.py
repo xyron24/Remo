@@ -34,7 +34,7 @@ _UNDO_LAST = frozenset(
     }
 )
 
-_SEPARATORS = " :,-–—"
+_SEPARATORS = " :,-–,"
 
 
 def normalize(text: str) -> str:

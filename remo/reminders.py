@@ -292,7 +292,7 @@ class ReminderScheduler(threading.Thread):
 
 
 def chime_wav(path: str | Path, freq: float = 880.0, ms: int = 400, rate: int = 16000) -> Path:
-    """Generate a soft alarm chime (sine with decay) — no TTS cost."""
+    """Generate a soft alarm chime (sine with decay) , no TTS cost."""
     path = Path(path)
     frames = int(rate * ms / 1000)
     samples = [

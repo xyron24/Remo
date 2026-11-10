@@ -2,7 +2,7 @@
 
 SQLite holds every table; notes are also stored in a Latin transliteration plus
 a meaning vector so "maths" can find "मैथ्स". Vectors come from a tiny offline
-hashed embedder — no network, deterministic — behind a swappable interface.
+hashed embedder , no network, deterministic , behind a swappable interface.
 Full-text search uses FTS5 when the local SQLite has it, else LIKE.
 """
 from __future__ import annotations
@@ -340,6 +340,22 @@ class Memory:
         cur = self.db.execute("UPDATE reminders SET armed = 0 WHERE id = ?", (reminder_id,))
         self.db.commit()
         return cur.rowcount > 0
+
+    def list_fired(self, limit: int = 20) -> list[Reminder]:
+        rows = self.db.execute(
+            "SELECT * FROM reminders WHERE armed = 0 ORDER BY fire_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [self._reminder_from(r) for r in rows]
+
+    def recent_changes(self, limit: int = 20) -> list[dict]:
+        rows = self.db.execute(
+            "SELECT c.summary, c.source_quote, c.source_link, c.seen_at, c.briefed,"
+            " w.url AS watch_url, w.kind AS watch_kind"
+            " FROM changes c JOIN watched_items w ON w.id = c.watched_id"
+            " ORDER BY c.seen_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     def delete_reminder(self, reminder_id: int) -> bool:
         cur = self.db.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))

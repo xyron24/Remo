@@ -3,85 +3,211 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Remo — speak once, remember forever</title>
+<title>Remo: your voice memory</title>
 <link rel="stylesheet" href="/static/tokens.css">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">
-    <span class="mark" aria-hidden="true">R</span>
-    <div>
-      <h1>Remo</h1>
-      <p>Speak once. Remember forever.</p>
-    </div>
-  </div>
-  <div class="controls">
-    <div class="lang" role="group" aria-label="Language">
-      <button id="lang-hi" class="on" type="button">Hinglish</button>
-      <button id="lang-mr" type="button">Marathi</button>
-    </div>
-    <a class="ghost" href="/landing/landing.html">About</a>
-    <button id="seed" class="ghost" type="button" title="Fill in sample notes for a demo">Demo data</button>
-  </div>
-</header>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5Z"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v12h14V8"/><path d="M10 12h4"/></symbol>
+    <symbol id="i-brief" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9a6 6 0 1 0-12 0c0 6-2.5 7-2.5 7h17S18 15 18 9Z"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2M5.6 5.6l1.4 1.4M3 12h2M18.4 5.6 17 7M21 12h-2"/><path d="M8 17a4 4 0 1 1 8 0"/><path d="M3 21h18"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 2h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 22h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.06-.4.1-.8.1-1.2Z"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 19v3"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4 20-7Z"/><path d="M22 2 11 13"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4V8Z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-dot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17.5v.5"/></symbol>
+    <symbol id="i-vol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9.2 9.2 0 0 1 0 13"/></symbol>
+  </defs>
+</svg>
 
-<main>
-  <section class="hero">
-    <div class="pill"><span id="dot" class="dot ready"></span><span id="status">Ready — press the mic and speak</span></div>
-    <div class="micwrap">
-      <span class="ring" aria-hidden="true"></span>
-      <span class="ring r2" aria-hidden="true"></span>
-      <button id="mic" class="mic" type="button" aria-label="Start or stop recording">
-        <svg viewBox="0 0 24 24" width="36" height="36" aria-hidden="true">
-          <path fill="currentColor" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-5a3.5 3.5 0 1 0-7 0v5A3.5 3.5 0 0 0 12 15Zm7-3.5a7 7 0 0 1-14 0H3.5a8.5 8.5 0 0 0 7 8.33V21.5h3v-1.67a8.5 8.5 0 0 0 7-8.33H19Z"/>
-        </svg>
-      </button>
+<div class="shell">
+  <button id="menu-btn" class="icon-btn menu-btn" type="button" aria-label="Open navigation"><svg><use href="#i-menu"/></svg></button>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="side-brand">
+      <span class="mark" aria-hidden="true">R</span>
+      <div class="side-brand-text"><strong>Remo</strong><span>Your voice memory</span></div>
+      <button id="collapse" class="icon-btn" type="button" aria-label="Collapse sidebar"><svg><use href="#i-chev"/></svg></button>
     </div>
-    <canvas id="wave" width="520" height="64" aria-hidden="true"></canvas>
-    <p class="hint">Start with “yaad rakhna” / “remember” / “lakshat thev” to save. Ask anything to recall.</p>
-    <div id="pending" class="pending" hidden></div>
-    <dl class="stats">
-      <div><dt>Notes</dt><dd id="stat-notes">0</dd></div>
-      <div><dt>Pending</dt><dd id="stat-pending">0</dd></div>
-      <div><dt>Reminders</dt><dd id="stat-rem">0</dd></div>
-      <div><dt>Watched</dt><dd id="stat-watch">0</dd></div>
-    </dl>
-  </section>
+    <nav class="side-nav">
+      <p class="side-label">Workspace</p>
+      <a href="#/home" data-page="home"><svg><use href="#i-home"/></svg><span>Home</span></a>
+      <a href="#/ask" data-page="ask"><svg><use href="#i-chat"/></svg><span>Ask Remo</span></a>
+      <a href="#/memories" data-page="memories"><svg><use href="#i-archive"/></svg><span>Memories</span><b id="badge-notes" class="badge" hidden></b></a>
+      <a href="#/work" data-page="work"><svg><use href="#i-brief"/></svg><span>Work and Tasks</span><b id="badge-work" class="badge" hidden></b></a>
+      <a href="#/reminders" data-page="reminders"><svg><use href="#i-bell"/></svg><span>Reminders</span><b id="badge-rem" class="badge" hidden></b></a>
+      <a href="#/watchlist" data-page="watchlist"><svg><use href="#i-eye"/></svg><span>Watchlist</span><b id="badge-watch" class="badge" hidden></b></a>
+      <p class="side-label">Personal</p>
+      <a href="#/briefing" data-page="briefing"><svg><use href="#i-sun"/></svg><span>Daily Briefing</span></a>
+      <a href="#/voice" data-page="voice"><svg><use href="#i-mic"/></svg><span>Voice and Language</span></a>
+      <a href="#/settings" data-page="settings"><svg><use href="#i-gear"/></svg><span>Settings</span></a>
+    </nav>
+    <div class="side-foot">
+      <div class="side-status"><span id="side-dot" class="dot ready"></span><span id="side-status">Ready</span></div>
+      <a class="side-about" href="/landing/landing.html">About</a>
+    </div>
+  </aside>
+  <div id="scrim" class="scrim" hidden></div>
 
-  <section class="threadwrap">
-    <h2>Conversation</h2>
-    <div id="thread" class="thread" aria-live="polite"></div>
-  </section>
+  <main class="main">
+    <section id="page-home" class="page">
+      <div class="greet">
+        <div>
+          <h2 id="greeting">Good evening</h2>
+          <p class="lede">What would you like to remember?</p>
+          <p id="dateline" class="muted"></p>
+        </div>
+        <div id="conn" class="conn"><span class="dot ready"></span><span>Connected</span></div>
+      </div>
 
-  <section class="panels">
-    <div class="panel wide">
-      <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7V3Zm1 4v5.4l4.2 2.5-.9 1.5L11 13.5V7h2Z"/></svg>Timeline</h2>
-      <ul id="timeline" class="timeline"><li class="empty">Nothing saved yet.</li></ul>
+      <div class="voice-card">
+        <div class="voice-top">
+          <div id="v-state" class="v-state">Tap to talk to Remo</div>
+          <div id="v-lang" class="v-lang">Hinglish</div>
+        </div>
+        <div class="voice-mid">
+          <button id="v-mic" class="v-mic" type="button" aria-label="Start or stop recording"><svg><use href="#i-mic"/></svg></button>
+          <canvas id="v-wave" width="560" height="72" aria-hidden="true"></canvas>
+        </div>
+        <div class="voice-sub">
+          <span id="v-timer" class="timer" hidden>0:00</span>
+          <span id="v-heard" class="heard" hidden></span>
+          <span id="v-pending" class="pending" hidden></span>
+        </div>
+        <form id="v-form" class="voice-form" autocomplete="off">
+          <input id="v-text" type="text" placeholder="Or type here, for example: kya bacha hai?" aria-label="Type to Remo">
+          <button type="submit" aria-label="Send"><svg><use href="#i-send"/></svg></button>
+        </form>
+      </div>
+
+      <div id="thread-home" class="thread" aria-live="polite"></div>
+
+      <div class="cards">
+        <a class="card" href="#/memories"><svg><use href="#i-archive"/></svg><div><strong id="stat-notes">0</strong><span>Memories saved</span></div></a>
+        <a class="card" href="#/work"><svg><use href="#i-brief"/></svg><div><strong id="stat-pending">0</strong><span>Pending tasks</span></div></a>
+        <a class="card" href="#/reminders"><svg><use href="#i-bell"/></svg><div><strong id="stat-rem">0</strong><span>Upcoming reminders</span></div></a>
+        <a class="card" href="#/watchlist"><svg><use href="#i-eye"/></svg><div><strong id="stat-watch">0</strong><span>Watched items</span></div></a>
+      </div>
+
+      <h3 class="sect">Recent activity</h3>
+      <ul id="activity" class="activity"></ul>
+    </section>
+
+    <section id="page-ask" class="page" hidden>
+      <div class="page-head"><h2>Ask Remo</h2><p class="muted">Speak or type. Conversation stays on this page.</p></div>
+      <div id="thread-ask" class="thread tall" aria-live="polite"></div>
+      <div class="composer">
+        <button id="ask-mic" class="v-mic small" type="button" aria-label="Voice input"><svg><use href="#i-mic"/></svg></button>
+        <form id="ask-form" autocomplete="off">
+          <input id="ask-text" type="text" placeholder="Ask anything, for example: welcome back" aria-label="Type to Remo">
+          <button type="submit" aria-label="Send"><svg><use href="#i-send"/></svg></button>
+        </form>
+      </div>
+      <p class="muted small">Listening in <strong id="ask-lang">Hinglish</strong>. Change it in Settings.</p>
+    </section>
+
+    <section id="page-memories" class="page" hidden>
+      <div class="page-head"><h2>Memories</h2><p class="muted">Everything you asked Remo to keep.</p></div>
+      <div class="searchbar"><svg><use href="#i-search"/></svg><input id="mem-search" type="text" placeholder="Search memories" aria-label="Search memories"></div>
+      <ul id="mem-list" class="rows"></ul>
+    </section>
+
+    <section id="page-work" class="page" hidden>
+      <div class="page-head"><h2>Work and Tasks</h2><p class="muted">Done vs pending, per project and issue.</p></div>
+      <div id="work-list" class="stack"></div>
+    </section>
+
+    <section id="page-reminders" class="page" hidden>
+      <div class="page-head"><h2>Reminders</h2><p class="muted">Speak to set one, for example: kal subah 9 baje chai yaad dilana.</p></div>
+      <h3 class="sect">Upcoming</h3>
+      <ul id="rem-list" class="rows"></ul>
+      <h3 class="sect">Completed</h3>
+      <ul id="rem-done" class="rows"></ul>
+    </section>
+
+    <section id="page-watchlist" class="page" hidden>
+      <div class="page-head"><h2>Watchlist</h2><p class="muted">GitHub issues and repos Remo keeps an eye on.</p></div>
+      <form id="watch-form" class="inline-form" autocomplete="off">
+        <input id="watch-url" type="url" placeholder="https://github.com/owner/repo/issues/1" aria-label="GitHub URL to watch">
+        <button type="submit">Watch</button>
+      </form>
+      <div id="watch-list" class="stack"></div>
+    </section>
+
+    <section id="page-briefing" class="page" hidden>
+      <div class="page-head"><h2>Daily Briefing</h2><p class="muted">Your welcome back, on demand.</p></div>
+      <div class="brief-actions">
+        <button id="brief-speak" class="primary" type="button"><svg><use href="#i-vol"/></svg>Speak my briefing</button>
+      </div>
+      <div id="brief-body" class="stack"></div>
+    </section>
+
+    <section id="page-voice" class="page" hidden>
+      <div class="page-head"><h2>Voice and Language</h2><p class="muted">How Remo listens and speaks back.</p></div>
+      <div class="stack">
+        <div class="panel">
+          <h3><svg><use href="#i-globe"/></svg>Language</h3>
+          <div class="langrow" role="group" aria-label="Language">
+            <button id="set-hi" type="button">Hinglish</button>
+            <button id="set-mr" type="button">Marathi</button>
+          </div>
+          <p class="muted small">Listening and replies follow this language. STT and TTS codes stay hi-IN / mr-IN.</p>
+        </div>
+        <div class="panel">
+          <h3><svg><use href="#i-vol"/></svg>Audio</h3>
+          <label class="check"><input id="set-autoplay" type="checkbox" checked> Autoplay spoken replies</label>
+          <p class="muted small">Voice input uses your browser microphone. Every reply is spoken by Gnani Timbre.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="page-settings" class="page" hidden>
+      <div class="page-head"><h2>Settings</h2><p class="muted">Only real settings. Nothing decorative.</p></div>
+      <div class="stack">
+        <div class="panel">
+          <h3><svg><use href="#i-gear"/></svg>Application</h3>
+          <dl id="app-info" class="kv"><dt>Status</dt><dd>Loading</dd></dl>
+          <button id="seed" class="ghost" type="button">Load demo data</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="context">
+    <div class="panel">
+      <h3>Next up</h3>
+      <p id="ctx-next" class="muted">All clear.</p>
     </div>
     <div class="panel">
-      <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 22a2.4 2.4 0 0 0 2.4-2.4H9.6A2.4 2.4 0 0 0 12 22Zm7-5.3v-1L17.5 14V9a5.5 5.5 0 0 0-4.5-5.4V2.5h-2v1.1A5.5 5.5 0 0 0 6.5 9v5L5 15.7v1H19Z"/></svg>Reminders</h2>
-      <ul id="reminders" class="plain"><li class="empty">None armed.</li></ul>
+      <h3>Today</h3>
+      <ul id="ctx-rem" class="mini"></ul>
     </div>
     <div class="panel">
-      <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 3H7v2H4v2h16V5h-3V3h-2v2h-2V3H9v2H7V3Zm10 8H5v9h14v-9Zm-2 7H7v-5h10v5Z"/></svg>Work log</h2>
-      <ul id="work" class="plain"><li class="empty">No work tracked.</li></ul>
+      <h3>Fresh changes</h3>
+      <ul id="ctx-changes" class="mini"></ul>
     </div>
-    <div class="panel">
-      <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5c5 0 9 4.6 10 7-1 2.4-5 7-10 7S3 14.4 2 12c1-2.4 5-7 10-7Zm0 2C8.2 7 4.8 10.2 4 12c.8 1.8 4.2 5 8 5s7.2-3.2 8-5c-.8-1.8-4.2-5-8-5Zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/></svg>Watched</h2>
-      <ul id="watched" class="plain"><li class="empty">Nothing watched.</li></ul>
-    </div>
-    <div class="panel">
-      <h2><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3 1.8 9l2.4 1.7V19h4.6v-5h6.4v5H20v-8.3L22.2 9 12 3Zm0 2.3L18.7 9H5.3L12 5.3Z"/></svg>Learned</h2>
-      <p id="learned" class="small empty">Remo learns your words as you speak.</p>
-    </div>
-  </section>
-</main>
+  </aside>
+</div>
 
-<footer>
-  <p>Voice by Gnani AI — Prisma listens, Timbre speaks. Your notes stay on this machine.</p>
-</footer>
-
-<script src="/static/app.js"></script>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/voice.js"></script>
+<script src="/static/js/app.js"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 """Work-log memory: spoken progress becomes done/pending structure.
 
 "GSoC update: login fix ho gaya, docs baaki hai" becomes a structured entry the
-user can query days later ("issue 214 mein kya bacha hai?"). Extractive —
+user can query days later ("issue 214 mein kya bacha hai?"). Extractive ,
 marker phrases split clauses into done vs pending, per persona.
 """
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """Voice quiz: fill-in-the-blank questions from your own notes.
 
-Extractive by design — the blanked word comes from the note itself, and spoken
+Extractive by design , the blanked word comes from the note itself, and spoken
 answers pass on an exact hit or close meaning overlap. Say "bas" to stop.
 """
 from __future__ import annotations

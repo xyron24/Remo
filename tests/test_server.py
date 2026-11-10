@@ -49,7 +49,36 @@ def _wav16k(seconds: float = 0.5) -> bytes:
 def test_index_and_landing_serve(client: TestClient) -> None:
     assert client.get("/").status_code == 200
     assert client.get("/landing/landing.html").status_code == 200
-    assert client.get("/static/app.js").status_code == 200
+    assert client.get("/static/js/app.js").status_code == 200
+    assert client.get("/static/js/api.js").status_code == 200
+    assert client.get("/static/js/voice.js").status_code == 200
+
+
+def test_info_reports_version_and_models(client: TestClient) -> None:
+    body = client.get("/api/info").json()
+    assert body["version"] == "0.1.0"
+    assert body["stt_model"] == "prisma-v2.5"
+    assert body["tts_model"] == "timbre-v2.5"
+    assert body["voice"] == "Nalini"
+
+
+def test_state_includes_fired_and_changes(client: TestClient, tmp_path: Path) -> None:
+    import os
+    import time
+
+    from remo.memory import Memory
+
+    mem = Memory(Path(os.environ["REMO_DB"]))
+    mem.add_reminder("purana", time.time() - 10)
+    for reminder in mem.list_armed(time.time()):
+        mem.disarm(reminder.id)
+    watched = mem.watch_url("github_issue", "https://github.com/o/r/issues/1")
+    mem.store_changes(watched.id, [("Naya comment.", "q", "https://x/1", time.time())])
+    mem.close()
+    body = client.get("/api/state").json()
+    assert [r["text"] for r in body["reminders_fired"]] == ["purana"]
+    assert [c["summary"] for c in body["changes"]] == ["Naya comment."]
+    assert body["changes"][0]["watch_url"] == "https://github.com/o/r/issues/1"
 
 
 def test_text_save_then_recall(client: TestClient) -> None:

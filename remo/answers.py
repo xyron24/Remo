@@ -1,6 +1,6 @@
 """Spoken yes/no: every spelling of haan and nahi, in both scripts.
 
-Returns True / False / None (unclear). Callers must ask again on None —
+Returns True / False / None (unclear). Callers must ask again on None ,
 never guess "no".
 """
 from __future__ import annotations

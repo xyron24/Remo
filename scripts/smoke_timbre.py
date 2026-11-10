@@ -1,7 +1,7 @@
 """Smoke test: Gnani Timbre text-to-speech (REST).
 
 Synthesizes Hinglish speech to out/hello.wav (which smoke_prisma.py then
-transcribes back — a full round-trip through both Gnani speech models).
+transcribes back , a full round-trip through both Gnani speech models).
 
 Usage:
     python scripts/smoke_timbre.py [--text "..."] [--out out/hello.wav]

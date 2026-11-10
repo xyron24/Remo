@@ -242,9 +242,29 @@ def state(mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
         for e in mem.list_work_entries(limit=10)
     ]
     watched = [{"id": w.id, "url": w.url, "checked_at": w.last_checked_at} for w in mem.list_watched()]
+    fired = [
+        {"id": r.id, "text": r.text, "fire_at": r.fire_at,
+         "when": datetime.fromtimestamp(r.fire_at).strftime("%d %b, %I:%M %p").lstrip("0")}
+        for r in mem.list_fired()
+    ]
     return JSONResponse({
-        "notes": notes, "reminders": alarms, "work": entries,
-        "watched": watched, "learned": boost_mod.snapshot(mem),
+        "notes": notes, "reminders": alarms, "reminders_fired": fired, "work": entries,
+        "watched": watched, "changes": mem.recent_changes(), "learned": boost_mod.snapshot(mem),
+    })
+
+
+@app.get("/api/info")
+def info() -> JSONResponse:
+    from remo import lang as lang_mod
+    from remo import __version__ as _version
+
+    settings = load_settings()
+    return JSONResponse({
+        "version": _version,
+        "language": settings.language,
+        "voice": lang_mod.resolve_voice(settings.tts_voice, settings.language),
+        "stt_model": settings.stt_model,
+        "tts_model": settings.tts_model,
     })
 
 

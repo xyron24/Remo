@@ -42,7 +42,7 @@ def downsample_mono16(pcm: bytes, from_rate: int, to_rate: int) -> bytes:
 def read_wav_mono16(path: Path, expected_rate: int) -> bytes:
     """Read a WAV file as 16-bit mono PCM. Stereo is averaged; 8-bit scaled.
 
-    Raises ValueError when the sample rate differs — resampling is out of scope.
+    Raises ValueError when the sample rate differs , resampling is out of scope.
     """
     with wave.open(str(path), "rb") as wav:
         channels = wav.getnchannels()
