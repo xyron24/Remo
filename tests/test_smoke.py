@@ -32,8 +32,8 @@ def test_timbre_then_prisma_roundtrip(tmp_path: Path) -> None:
     assert settings.gnani_api_key, "GNANI_API_KEY must be set for live tests"
 
     wav = tmp_path / "hello.wav"
-    size = synthesize("नमस्ते, मैं रेमो हूँ।", wav)
-    assert size > 1000, "TTS returned suspiciously little audio"
+    out = synthesize("नमस्ते, मैं रेमो हूँ।", out=wav)
+    assert out.stat().st_size > 1000, "TTS returned suspiciously little audio"
 
     transcript = transcribe_file_rest(wav, settings.language)
     assert transcript.strip(), "STT returned an empty transcript"
@@ -53,7 +53,7 @@ def test_streaming_transcription_live(tmp_path: Path) -> None:
     assert settings.gnani_api_key, "GNANI_API_KEY must be set for live tests"
 
     wav = tmp_path / "stream.wav"
-    synthesize("याद रखना, गणित में काम बाकी है।", wav)
+    synthesize("याद रखना, गणित में काम बाकी है।", out=wav)
     with wave.open(str(wav), "rb") as handle:
         rate = handle.getframerate()
         pcm = handle.readframes(handle.getnframes())

@@ -3,7 +3,7 @@
 Routes through the keyword gate first (auto-save), then undo/forget guards,
 then reminders, plan, quiz, watching, and recall answering. Stateless:
 confirmations travel back as a `pending` payload the caller holds and resolves.
-Every reply renders in the locale from settings (Hindi/Marathi).
+Every reply renders in the locale from settings (Hinglish/Marathi).
 """
 from __future__ import annotations
 

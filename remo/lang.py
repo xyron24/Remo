@@ -1,7 +1,7 @@
 """Languages: per-locale voices plus every user-facing string.
 
-Hindi + Marathi ship fully translated across turns, recall, work-log, watcher,
-and briefing. Quiz verdicts and reminder read-backs stay Hindi-first until a
+Hinglish + Marathi ship fully translated across turns, recall, work-log, watcher,
+and briefing. Quiz verdicts and reminder read-backs stay Hinglish-first until a
 native speaker reviews them — they fall back automatically (never crash).
 """
 from __future__ import annotations
@@ -127,14 +127,14 @@ def lang_key(code: str | None) -> str:
 
 
 def strings(code: str | None = "hi-IN") -> dict[str, str]:
-    """Full string table for a locale; missing keys fall back to Hindi."""
+    """Full string table for a locale; missing keys fall back to Hinglish."""
     table = dict(HI)
     table.update(TABLES.get(lang_key(code), {}))
     return table
 
 
 def profile(code: str | None = "hi-IN") -> dict[str, str]:
-    """Voice + boost settings for a locale; unknown codes use Hindi."""
+    """Voice + boost settings for a locale; unknown codes use Hinglish."""
     return dict(PROFILES.get(code or "hi-IN", PROFILES["hi-IN"]))
 
 

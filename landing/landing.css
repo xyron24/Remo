@@ -28,4 +28,8 @@ h2 { font-family: var(--serif); font-size: 1.5rem; color: var(--olive-deep); mar
 .models dt { font-family: var(--serif); font-size: 1.2rem; color: var(--olive-deep); }
 .models dd { margin: 0; }
 code { background: var(--sage-soft); padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.88em; }
+.say { border-collapse: collapse; width: 100%; }
+.say td { border: 1px solid var(--stone); padding: 0.5rem 0.8rem; font-size: 0.93rem; }
+.say td:first-child { font-family: var(--serif); background: var(--paper); }
+.say td:last-child { color: var(--ink-soft); }
 footer { border-top: 1px solid var(--stone); margin-top: 3rem; padding: 1.2rem; color: var(--ink-soft); font-size: 0.88rem; }

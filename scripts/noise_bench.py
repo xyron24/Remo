@@ -125,7 +125,7 @@ def write_report(rows: list[dict]) -> None:
     means = [(name, sum(v) / len(v)) for name, v in by_condition.items()]
     (ROOT / "chart.svg").write_text(chart_svg(means), encoding="utf-8")
     lines = ["# Noise benchmark", "",
-             "Mean WER by condition (lower is better; fixtures: Timbre Hindi, "
+             "Mean WER by condition (lower is better; fixtures: Timbre Hinglish, "
              "noise: synthetic overlays, 8k = telephony downsample):", "",
              "| condition | mean WER |", "|---|---|"]
     lines += [f"| {name} | {mean:.1%} |" for name, mean in means]

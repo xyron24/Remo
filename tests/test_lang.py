@@ -9,7 +9,7 @@ from remo.memory import Memory
 
 
 def test_marathi_table_covers_every_hindi_key() -> None:
-    assert set(L.MR) == set(L.HI), "every Hindi string needs a Marathi twin"
+    assert set(L.MR) == set(L.HI), "every Hinglish string needs a Marathi twin"
 
 
 def test_templates_format_cleanly() -> None:
