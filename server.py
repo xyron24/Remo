@@ -128,6 +128,11 @@ def _route_text(mem: Memory, text: str, pending: dict | None, settings: Settings
 
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
+    return FileResponse(ROOT / "landing" / "landing.html")
+
+
+@app.get("/app", include_in_schema=False)
+def webapp() -> FileResponse:
     return FileResponse(ROOT / "web" / "app.html")
 
 

@@ -47,7 +47,12 @@ def _wav16k(seconds: float = 0.5) -> bytes:
 
 
 def test_index_and_landing_serve(client: TestClient) -> None:
-    assert client.get("/").status_code == 200
+    home = client.get("/")
+    assert home.status_code == 200
+    assert "landing.css" in home.text
+    app = client.get("/app")
+    assert app.status_code == 200
+    assert "/static/js/app.js" in app.text
     assert client.get("/landing/landing.html").status_code == 200
     assert client.get("/static/js/app.js").status_code == 200
     assert client.get("/static/js/api.js").status_code == 200

@@ -47,7 +47,7 @@
 
     <div class="nav-actions">
       <span class="lang-tag">Hinglish · मराठी</span>
-      <a class="btn-nav" href="/">Open Web App</a>
+      <a class="btn-nav" href="/app">Open Web App</a>
     </div>
   </div>
 </header>
@@ -64,7 +64,7 @@
             <span>Runs locally in any browser · Powered by Gnani AI Prisma &amp; Timbre</span>
           </div>
           <div class="banner-bar-actions">
-            <a class="btn-primary" href="/">Open Web App</a>
+            <a class="btn-primary" href="/app">Open Web App</a>
             <a class="btn-ghost" href="#workflows">Explore Workflows</a>
           </div>
         </figcaption>
@@ -98,7 +98,7 @@
             </div>
           </div>
           <div class="banner-btns">
-            <a class="btn-primary" href="/">Try in Browser</a>
+            <a class="btn-primary" href="/app">Try in Browser</a>
             <a class="btn-icon" href="#try" title="Try example phrases" aria-label="Try example phrases">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3"/></svg>
             </a>
@@ -314,27 +314,27 @@
         <table class="say-table">
           <tbody>
             <tr>
-              <td><a href="/?say=Yaad+rakhna,+issue+214:+login+fix+ho+gaya,+docs+baaki+hai">“Yaad rakhna, issue 214: login fix ho gaya, docs baaki hai”</a></td>
+              <td><a href="/app?say=Yaad+rakhna,+issue+214:+login+fix+ho+gaya,+docs+baaki+hai">“Yaad rakhna, issue 214: login fix ho gaya, docs baaki hai”</a></td>
               <td>Structured work entry saved instantly (Done vs Pending)</td>
             </tr>
             <tr>
-              <td><a href="/?say=Issue+214+mein+kya+bacha+hai?">“Issue 214 mein kya bacha hai?”</a></td>
+              <td><a href="/app?say=Issue+214+mein+kya+bacha+hai?">“Issue 214 mein kya bacha hai?”</a></td>
               <td>Pending-first recall answer, spoken aloud</td>
             </tr>
             <tr>
-              <td><a href="/?say=Welcome+back">“Welcome back”</a></td>
+              <td><a href="/app?say=Welcome+back">“Welcome back”</a></td>
               <td>Pending tasks + GitHub watcher deltas + next step</td>
             </tr>
             <tr>
-              <td><a href="/?say=Kal+subah+9+baje+chai+yaad+dilana">“Kal subah 9 baje chai yaad dilana”</a></td>
+              <td><a href="/app?say=Kal+subah+9+baje+chai+yaad+dilana">“Kal subah 9 baje chai yaad dilana”</a></td>
               <td>Hinglish time parsed, read back, chimed &amp; spoken at 9</td>
             </tr>
             <tr>
-              <td><a href="/?say=Maths+mein+quiz+karo">“Maths mein quiz karo”</a></td>
+              <td><a href="/app?say=Maths+mein+quiz+karo">“Maths mein quiz karo”</a></td>
               <td>Generates spoken quiz questions from your saved notes</td>
             </tr>
             <tr>
-              <td><a href="/?say=Lakshat+thev,+udya+meeting+aahe">“Lakshat thev, udya meeting aahe”</a></td>
+              <td><a href="/app?say=Lakshat+thev,+udya+meeting+aahe">“Lakshat thev, udya meeting aahe”</a></td>
               <td>Full save + recall + voice loop in Marathi</td>
             </tr>
           </tbody>
@@ -477,7 +477,7 @@ pip install -r requirements.txt
 cp .env.example .env
 uvicorn server:app --host 127.0.0.1 --port 8000</code></pre>
         <div class="closing-actions">
-          <a class="btn-primary" href="/">Open Web App</a>
+          <a class="btn-primary" href="/app">Open Web App</a>
           <a class="btn-ghost" href="https://docs.gnani.ai" target="_blank" rel="noopener">Gnani Docs ↗</a>
         </div>
       </div>
