@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="logo.svg" alt="Remo logo" width="120">
+<img src="assets/remo-logo.png" alt="Remo logo" width="280">
 
 # Remo
 
