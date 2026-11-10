@@ -14,30 +14,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import requests
-
-from remo.config import load_settings, require_api_key
+from remo.config import load_settings
 from remo.log import get_logger
+from remo.stt import transcribe_file_rest
 
 log = get_logger("smoke_prisma")
-
-
-def transcribe(audio_path: Path, language: str, timeout: int = 60) -> str:
-    settings = load_settings()
-    api_key = require_api_key(settings)
-    with audio_path.open("rb") as f:
-        resp = requests.post(
-            settings.stt_url,
-            headers={"X-API-Key-ID": api_key},
-            files={"audio_file": (audio_path.name, f, "audio/wav")},
-            data={"model": settings.stt_model, "language_code": language},
-            timeout=timeout,
-        )
-    resp.raise_for_status()
-    body = resp.json()
-    if not body.get("success", True):
-        raise RuntimeError(f"Prisma error: {body}")
-    return str(body.get("transcript", ""))
 
 
 def main() -> int:
@@ -53,7 +34,7 @@ def main() -> int:
 
     settings = load_settings()
     try:
-        transcript = transcribe(audio_path, args.language or settings.language)
+        transcript = transcribe_file_rest(audio_path, args.language or settings.language)
     except Exception as exc:  # noqa: BLE001 - smoke script reports and exits nonzero
         log.error("Prisma smoke test FAILED: %s", exc)
         return 1

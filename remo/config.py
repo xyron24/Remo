@@ -1,7 +1,7 @@
 """Runtime configuration for Remo.
 
 Reads from the environment, with optional `.env` file support parsed using only
-the standard library (so chunk 1 needs no extra dependencies).
+the standard library (so setup needs no extra dependencies).
 """
 from __future__ import annotations
 
