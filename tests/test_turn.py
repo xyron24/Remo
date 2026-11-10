@@ -51,6 +51,29 @@ def test_recall_turn_reads_matches(mem: Memory) -> None:
     assert "caching" in result.text
 
 
+def test_save_with_spoken_reminder_arms_and_acknowledges(mem: Memory) -> None:
+    result = turn.handle_text(
+        "yaad rakhna maine jo project banaya hai uska UI weak hai, 2 din baad update karunga, yaad dila dena",
+        mem=mem, settings=_settings(), speak=False,
+    )
+    assert result.action == "saved"
+    assert "2 din baad" in result.text and "yaad dila dungi" in result.text
+    assert len(mem.list_armed()) == 1
+
+
+def test_recall_answers_due_date_and_reminder(mem: Memory) -> None:
+    turn.handle_text(
+        "yaad rakhna project ka UI weak hai, 2 din baad update karna hai, yaad dila dena",
+        mem=mem, settings=_settings(), speak=False,
+    )
+    result = turn.handle_text(
+        "mujhe kya karna hai is project mein 2 din baad?", mem=mem, settings=_settings(), speak=False
+    )
+    assert result.action == "recall"
+    assert "2 din baad" in result.text and "reminder laga diya" in result.text
+    assert "Mujhe ye mila" not in result.text
+
+
 def test_unknown_statement_gets_help(mem: Memory) -> None:
     result = turn.handle_text("hello hello", mem=mem, settings=_settings(), speak=False)
     assert result.action == "help"

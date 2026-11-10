@@ -20,6 +20,16 @@ TUESDAY_9AM = datetime(2026, 11, 10, 9, 0, 0)
 def test_relative_times() -> None:
     assert parse_reminder_time("5 minute baad chai dekhna", TUESDAY_9AM) == TUESDAY_9AM + timedelta(minutes=5)
     assert parse_reminder_time("2 ghante baad call karna", TUESDAY_9AM) == TUESDAY_9AM + timedelta(hours=2)
+    assert parse_reminder_time("2 din baad UI update karna", TUESDAY_9AM) == TUESDAY_9AM + timedelta(days=2)
+    assert parse_reminder_time("3 hafte baad checkup", TUESDAY_9AM) == TUESDAY_9AM + timedelta(weeks=3)
+
+
+def test_extract_time_mention_echoes_words() -> None:
+    from remo.reminders import extract_time_mention
+
+    span, moment = extract_time_mention("wo main 2 din baad karunga", TUESDAY_9AM)
+    assert span == "2 din baad" and moment == TUESDAY_9AM + timedelta(days=2)
+    assert extract_time_mention("kabhi chai peena", TUESDAY_9AM) == ("", None)
 
 
 def test_named_days() -> None:

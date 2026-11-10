@@ -38,9 +38,19 @@ WEEKDAYS = {
 FILLERS = {
     "yaad", "dilana", "dila", "dena", "remind", "me", "reminder",
     "mujhe", "ko", "ki", "ke", "ka", "please", "zara", "ek", "baje",
+    "tu", "tum", "aap",
 }
 
-_RELATIVE = re.compile(r"(\d+)\s*(seconds?|minutes?|mins?|ghante?|ghanta|hours?|hrs?)\s*baad", re.I)
+_RELATIVE = re.compile(
+    r"(\d+)\s*(seconds?|minutes?|mins?|ghante?|ghanta|hours?|hrs?|din|dino|hafte|hafto)\s*baad", re.I
+)
+
+_RELATIVE_SECONDS = (
+    (("hour", "hr", "ghant", "ghanta"), 3600),
+    (("min",), 60),
+    (("din", "dino"), 86400),
+    (("haft", "hafto"), 604800),
+)
 _FRACTION = re.compile(r"(sava|saade|saadhe|sadhe|paune|pauna)\s*(\d+|[a-zA-Z]+)", re.I)
 _CLOCK = re.compile(r"(\d{1,2}):(\d{2})\s*(am|pm)?", re.I)
 _MERIDIEM = re.compile(r"(\d{1,2}|[a-zA-Z]+)\s*(am|pm)\b", re.I)
@@ -89,9 +99,12 @@ def _extract(text: str, now: datetime) -> tuple[list[tuple[int, int]], datetime 
     if match:
         amount = int(match.group(1))
         unit = match.group(2).lower()
-        seconds = amount * (3600 if unit.startswith(("hour", "hr", "ghant", "ghanta")) else 60
-                            if unit.startswith(("min",)) else 1)
-        return [(match.start(), match.end())], now + timedelta(seconds=seconds)
+        scale = 1
+        for prefixes, seconds in _RELATIVE_SECONDS:
+            if unit.startswith(prefixes):
+                scale = seconds
+                break
+        return [(match.start(), match.end())], now + timedelta(seconds=amount * scale)
 
     offset = 0
     weekday = False
@@ -197,6 +210,16 @@ def _extract(text: str, now: datetime) -> tuple[list[tuple[int, int]], datetime 
 def parse_reminder_time(text: str, now: datetime | None = None) -> datetime | None:
     """Resolve the reminder moment, or None when no time is found."""
     return _extract(text, now or datetime.now())[1]
+
+
+def extract_time_mention(text: str, now: datetime | None = None) -> tuple[str, datetime | None]:
+    """The time words as said ("2 din baad") plus the resolved moment, if any."""
+    now = now or datetime.now()
+    spans, moment = _extract(text, now)
+    if moment is None:
+        return "", None
+    mention = " ".join(text[start:end] for start, end in spans).strip()
+    return mention, moment
 
 
 def split_task_time(text: str, now: datetime | None = None) -> tuple[str, datetime | None]:

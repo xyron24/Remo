@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from remo import lang as lang_mod
+from remo import reminders as reminders_mod
 from remo.brain_keywords import normalize
 from remo.memory import Memory, Note
 
@@ -92,9 +93,9 @@ def is_recall_query(text: str) -> bool:
     return not words.isdisjoint(_QUESTION_WORDS)
 
 
-def _short(text: str) -> str:
+def _short(text: str, limit: int = _MAX_READ) -> str:
     text = text.strip()
-    return text if len(text) <= _MAX_READ else text[:_MAX_READ].rstrip() + "…"
+    return text if len(text) <= limit else text[:limit].rstrip() + "…"
 
 
 def compose_left_off(notes: list[Note], s: dict | None = None) -> str:
@@ -118,3 +119,36 @@ def compose_recall(notes: list[Note], s: dict | None = None) -> str:
         return s["recall_none"]
     items = " ".join(_short(n.text) for n in notes[:3])
     return s["recall_found"].format(items=items)
+
+
+def task_core(text: str, limit: int = 160) -> str:
+    """The note minus its time mention and filler words ("UI update karna hai")."""
+    task, _ = reminders_mod.split_task_time(text)
+    return _short(task or text, limit)
+
+
+def _has_matching_reminder(mem: Memory, moment) -> bool:
+    try:
+        target = moment.timestamp()
+    except (AttributeError, OSError, OverflowError):
+        return False
+    return any(abs(r.fire_at - target) < 3600 for r in mem.list_armed())
+
+
+def compose_answer(notes: list[Note], mem: Memory, s: dict | None = None) -> str:
+    """Natural answer: what you said + when it is due + whether a reminder is set."""
+    s = s or lang_mod.HI
+    if not notes:
+        return s["recall_none"]
+    best = notes[0]
+    parts = [s["answer_said"].format(task=task_core(best.text))]
+    span, moment = reminders_mod.extract_time_mention(best.text)
+    if span:
+        parts.append(s["answer_due"].format(span=span.strip()))
+    if moment is not None and _has_matching_reminder(mem, moment):
+        parts.append(s["answer_reminded"].strip())
+    elif _PENDING_PAT.search(f"{best.text} {best.text_latin}"):
+        parts.append(s["answer_pending"].strip())
+    elif len(notes) > 1:
+        parts.append(s["recall_found"].format(items=_short(notes[1].text)))
+    return " ".join(parts)

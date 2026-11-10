@@ -78,6 +78,10 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
         mem.add_note(content)
         if worklog_mod.is_work_update(content):
             worklog_mod.store_update(mem, content)
+        armed_span = _maybe_auto_remind(mem, content)
+        if armed_span:
+            return _speak(s["auto_remind"].format(span=armed_span), "saved", settings, speak)
+        if worklog_mod.is_work_update(content):
             return _speak(s["ack_saved_work"], "saved", settings, speak)
         return _speak(s["ack_saved"], "saved", settings, speak)
 
@@ -134,13 +138,30 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
 
     hits = recall_mod.hybrid_search(mem, text, limit=3)
     if recall_mod.is_recall_query(text) or hits:
-        return _speak(recall_mod.compose_recall(hits, s=s), "recall", settings, speak)
+        return _speak(recall_mod.compose_answer(hits, mem, s=s), "recall", settings, speak)
     return _speak(s["help"], "help", settings, speak)
 
 
 def _is_remind_request(text: str) -> bool:
     norm = kw.normalize(text)
     return any(marker in norm for marker in _REMIND_MARKERS)
+
+
+def _maybe_auto_remind(mem: Memory, content: str) -> str:
+    """Arm a reminder the note itself asks for ("... 2 din baad yaad dila dena").
+
+    Returns the time span as said (for the ack), or "" when the note carries
+    no reminder instruction. The ack always echoes the time, so a misheard
+    time is heard and can be cancelled immediately.
+    """
+    if not any(marker in kw.normalize(content) for marker in _REMIND_MARKERS):
+        return ""
+    span, moment = reminders_mod.extract_time_mention(content)
+    if moment is None:
+        return ""
+    task, _ = reminders_mod.split_task_time(content)
+    mem.add_reminder((task or content)[:160], moment.timestamp())
+    return span.strip()
 
 
 def _quiz_topic(text: str) -> str | None:

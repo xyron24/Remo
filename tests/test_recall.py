@@ -61,3 +61,22 @@ def test_left_off_empty_memory(tmp_path: Path) -> None:
 def test_recall_compose_with_and_without_hits(mem: Memory) -> None:
     assert "differential" in R.compose_recall(R.hybrid_search(mem, "differential"))
     assert "yaad nahi" in R.compose_recall([])
+
+
+def test_answer_states_said_due_and_reminder(tmp_path: Path) -> None:
+    import time as _time
+
+    mem = Memory(tmp_path / "remo.db")
+    mem.add_note("project ka UI weak hai, 2 din baad update karna hai")
+    note = mem.list_recent()[0]
+    mem.add_reminder("UI update", _time.time() + 2 * 86400 - 60)
+    say = R.compose_answer([note], mem)
+    assert "Aapne kaha tha" in say and "2 din baad" in say and "reminder laga diya" in say
+    mem.close()
+
+
+def test_answer_without_time_or_reminder(mem: Memory) -> None:
+    hits = R.hybrid_search(mem, "kirana")
+    say = R.compose_answer(hits, mem)
+    assert "Aapne kaha tha" in say and "atta" in say
+    assert R.compose_answer([], mem) == R.compose_recall([])
