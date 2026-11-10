@@ -207,7 +207,8 @@ END;
 
 class Memory:
     def __init__(self, path: Path | str = ":memory:", embedder: HashEmbedder | None = None) -> None:
-        self.db = sqlite3.connect(str(path))
+        # One connection per request; never shared across threads without care.
+        self.db = sqlite3.connect(str(path), check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(_SCHEMA)
         try:

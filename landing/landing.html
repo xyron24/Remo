@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remo — a voice memory that tells you what changed</title>
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/landing/landing.css">
+</head>
+<body>
+<header class="wrap nav">
+  <span class="wordmark">Remo</span>
+  <nav><a href="/">Open the app</a><a href="#models">Gnani AI</a><a href="#privacy">Privacy</a><a href="#start">Start</a></nav>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <h1>Speak once.<br>Remember everything.<br>Miss nothing.</h1>
+    <p class="lede">Remo is a Hinglish and Marathi voice memory. Tell it your day, your work, your farm, your shop —
+      and days later it answers <em>where you left off</em> and <em>what changed while you were away</em>,
+      out loud, in your language.</p>
+    <p><a class="cta" href="/">Try it in your browser</a></p>
+    <p class="note">Runs anywhere: macOS, Windows, Linux — and any phone, Android and iOS included.</p>
+  </section>
+
+  <section>
+    <h2>How a day with Remo sounds</h2>
+    <ol class="steps">
+      <li><strong>Evening, two minutes.</strong> “Yaad rakhna, issue 214: login fix ho gaya, docs baaki hai.”
+        Stored — no questions asked.</li>
+      <li><strong>Days later.</strong> “Issue 214 mein kya bacha hai?” Remo answers with what is pending first.</li>
+      <li><strong>Welcome back.</strong> “Koi update aaya?” Remo briefs what changed on the watched issue since
+        you were last here — with links.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>What it does</h2>
+    <ul class="features">
+      <li><strong>Keyword saving.</strong> “Yaad rakhna”, “remember”, or “lakshat thev” stores instantly. Undo is one
+        sentence away.</li>
+      <li><strong>Work memory.</strong> Done vs pending, per project and issue — for students, farmers, shopkeepers,
+        and health workers alike.</li>
+      <li><strong>Change watcher.</strong> Point Remo at a GitHub issue or repo; it reports only what is new.</li>
+      <li><strong>Reminders that speak.</strong> Hinglish times (“saade nau”, “5 minute baad”), chimed and spoken,
+        surviving restarts.</li>
+      <li><strong>Quiz + day plan.</strong> Tested on your own notes; briefed every morning.</li>
+      <li><strong>Learns your voice.</strong> Your vocabulary boosts recognition; stubborn mishearings become fixes.</li>
+    </ul>
+  </section>
+
+  <section id="models">
+    <h2>Powered by Gnani AI</h2>
+    <dl class="models">
+      <div><dt>Prisma</dt><dd>Speech-to-text over a realtime stream — Hindi, Hinglish, and Marathi, with your words
+        boosted and a public noise benchmark in the repo.</dd></div>
+      <div><dt>Timbre</dt><dd>Text-to-speech for every reply, briefing, and alarm — Nalini for Hindi, Zahira for
+        Marathi.</dd></div>
+      <div><dt>Evon</dt><dd>Reasoning upgrades on Gnani's open-weight model are next on the roadmap.</dd></div>
+    </dl>
+  </section>
+
+  <section id="privacy">
+    <h2>Your memory stays yours</h2>
+    <p>Notes, reminders, and keys live on your own machine. Voice goes to Gnani for transcription, text goes to Gnani
+      for speech, and nothing else leaves. The demo uses made-up data only.</p>
+  </section>
+
+  <section id="start">
+    <h2>Start in two minutes</h2>
+    <ol class="start">
+      <li>Copy <code>.env.example</code> to <code>.env</code> and paste a key from
+        <a href="https://app.gnani.ai/voice">app.gnani.ai/voice</a>.</li>
+      <li>Run <code>pip install -r requirements.txt</code>, then
+        <code>uvicorn server:app --host 127.0.0.1 --port 8000</code>.</li>
+      <li>Open <code>http://127.0.0.1:8000</code>, press the mic, and say “yaad rakhna…”.</li>
+    </ol>
+  </section>
+</main>
+
+<footer class="wrap">
+  <p>Built solo for the Great Indian AI Internship Challenge 2026. Speech and voice by
+    <a href="https://gnani.ai">Gnani AI</a>.</p>
+</footer>
+</body>
+</html>

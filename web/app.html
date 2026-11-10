@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remo — speak once, remember forever</title>
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true">R</span>
+    <div>
+      <h1>Remo</h1>
+      <p>Speak once. Remember forever.</p>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="lang" role="group" aria-label="Language">
+      <button id="lang-hi" class="on" type="button">Hindi</button>
+      <button id="lang-mr" type="button">Marathi</button>
+    </div>
+    <a class="ghost" href="/landing/landing.html">About</a>
+    <button id="seed" class="ghost" type="button" title="Fill in sample notes for a demo">Demo data</button>
+  </div>
+</header>
+
+<main>
+  <section class="talk">
+    <div class="status"><span id="dot" class="dot ready"></span><span id="status">Ready — press the mic and speak</span></div>
+    <button id="mic" class="mic" type="button" aria-label="Start or stop recording">
+      <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true">
+        <path fill="currentColor" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-5a3.5 3.5 0 1 0-7 0v5A3.5 3.5 0 0 0 12 15Zm7-3.5a7 7 0 0 1-14 0H3.5a8.5 8.5 0 0 0 7 8.33V21.5h3v-1.67a8.5 8.5 0 0 0 7-8.33H19Z"/>
+      </svg>
+    </button>
+    <p class="hint">Start with “yaad rakhna” / “remember” / “lakshat thev” to save. Ask anything to recall.</p>
+    <div id="thread" class="thread" aria-live="polite"></div>
+  </section>
+
+  <section class="panels">
+    <div class="panel wide">
+      <h2>Timeline</h2>
+      <ul id="timeline" class="timeline"><li class="empty">Nothing saved yet.</li></ul>
+    </div>
+    <div class="panel">
+      <h2>Reminders</h2>
+      <ul id="reminders" class="plain"><li class="empty">None armed.</li></ul>
+    </div>
+    <div class="panel">
+      <h2>Work log</h2>
+      <ul id="work" class="plain"><li class="empty">No work tracked.</li></ul>
+    </div>
+    <div class="panel">
+      <h2>Watched</h2>
+      <ul id="watched" class="plain"><li class="empty">Nothing watched.</li></ul>
+    </div>
+    <div class="panel">
+      <h2>Learned</h2>
+      <p id="learned" class="small empty">Remo learns your words as you speak.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p>Voice by Gnani AI — Prisma listens, Timbre speaks. Your notes stay on this machine.</p>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
