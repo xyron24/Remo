@@ -5,6 +5,8 @@ Speak once. Remember forever. Know what changed.
 Remo is a Hinglish + regional-language voice memory built solo for the Great Indian AI Internship Challenge 2026 on
 Gnani AI's Prisma (speech-to-text), Timbre (text-to-speech), and Evon (reasoning).
 
+_Runs anywhere — backend on macOS, Windows, or Linux; use it from any browser or phone, Android and iOS included._
+
 ## What Remo does
 
 - **Keyword auto-save** — start with "yaad rakhna" / "remember" (Hindi, Hinglish, or English) and everything after it
@@ -13,11 +15,12 @@ Gnani AI's Prisma (speech-to-text), Timbre (text-to-speech), and Evon (reasoning
   so "maths" finds "मैथ्स".
 - **Realtime transcription** — Gnani Prisma streams your voice to text over WebSocket, with vocabulary from your own
   notes boosted so it keeps hearing *you* better.
+- **Spoken answers** — ask "kya bacha hai?" and Remo replies out loud, pending items first, in a Timbre voice.
 
 ## On the way
 
-Spoken answers and reminders, voice quiz, work-log memory ("where did I leave off?"), change tracking ("what changed
-while you were away"), and a full regional-language experience.
+Reminders, voice quiz, work-log memory, change tracking ("what changed while you were away"), and a full
+regional-language experience.
 
 ## Quickstart
 
