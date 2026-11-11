@@ -109,6 +109,30 @@ def test_tomorrow_left_off_lists_day_directly(mem: Memory) -> None:
     assert past.action == "recall"
 
 
+def test_llm_answer_used_when_available(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from remo import llm as llm_mod
+    from remo import turn as turn_mod
+
+    _run("yaad rakhna kal kirana se atta lena hai", mem)
+    monkeypatch.setattr(llm_mod, "compose", lambda *a, **k: "Kal atta lena hai, kirana se.")
+    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    result = turn_mod.handle_text("kirana se kya lena hai?", mem=mem, settings=settings, speak=False)
+    assert result.action == "recall"
+    assert result.text == "Kal atta lena hai, kirana se."
+
+
+def test_llm_failure_falls_back_to_extractive(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from remo import llm as llm_mod
+    from remo import turn as turn_mod
+
+    _run("yaad rakhna kal kirana se atta lena hai", mem)
+    monkeypatch.setattr(llm_mod, "compose", lambda *a, **k: None)
+    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    result = turn_mod.handle_text("kirana se kya lena hai?", mem=mem, settings=settings, speak=False)
+    assert result.action == "recall"
+    assert "Aapne kaha tha" in result.text
+
+
 def test_recall_answers_each_question_from_its_own_note(mem: Memory) -> None:
     _run("yaad rakhna live server check ho gaya", mem)
     _run("yaad rakhna differential equations baaki hai", mem)

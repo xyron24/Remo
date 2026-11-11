@@ -19,6 +19,7 @@ from remo.answers import parse_yes_no
 from remo import briefing as briefing_mod
 from remo.config import Settings, load_settings
 from remo import lang as lang_mod
+from remo import llm as llm_mod
 from remo.log import get_logger
 from remo.memory import Memory
 from remo import quiz as quiz_mod
@@ -148,7 +149,10 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
         if not hits and recall_mod.is_tell_all_query(text):
             recent = mem.list_recent(3)
             return _speak(recall_mod.compose_recall(recent, s=s), "recall", settings, speak)
-        return _speak(recall_mod.compose_answer(hits, mem, s=s), "recall", settings, speak)
+        say = llm_mod.try_compose(text, hits, mem, settings) if hits else None
+        if say is None:
+            say = recall_mod.compose_answer(hits, mem, s=s)
+        return _speak(say, "recall", settings, speak)
     return _speak(s["help"], "help", settings, speak)
 
 

@@ -36,6 +36,8 @@ class Settings:
     tts_model: str = "timbre-v2.5"
     tts_voice: str = ""  # blank = best voice for the language (see remo.lang)
     language: str = "hi-IN"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
 
 
 def load_settings(env_path: Path | None = None) -> Settings:
@@ -53,6 +55,8 @@ def load_settings(env_path: Path | None = None) -> Settings:
         tts_model=get("GNANI_TTS_MODEL", defaults.tts_model),
         tts_voice=get("GNANI_TTS_VOICE", defaults.tts_voice),
         language=get("REMO_LANG", defaults.language),
+        gemini_api_key=get("GEMINI_API_KEY", ""),
+        gemini_model=get("GEMINI_MODEL", defaults.gemini_model),
     )
 
 

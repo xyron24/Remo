@@ -166,6 +166,19 @@ def _has_matching_reminder(mem: Memory, moment) -> bool:
     return any(abs(r.fire_at - target) < 3600 for r in mem.list_armed())
 
 
+def describe_note(note: Note, mem: Memory) -> str:
+    """Machine facts about one note for the LLM composer ("due 2 din baad")."""
+    bits: list[str] = []
+    span, moment = reminders_mod.extract_time_mention(note.text)
+    if span:
+        bits.append(f"due {span.strip()}")
+    if moment is not None and _has_matching_reminder(mem, moment):
+        bits.append("a reminder is already set")
+    elif _PENDING_PAT.search(f"{note.text} {note.text_latin}"):
+        bits.append("still pending")
+    return "; ".join(bits)
+
+
 def compose_answer(notes: list[Note], mem: Memory, s: dict | None = None) -> str:
     """Natural answer: what you said + when it is due + whether a reminder is set."""
     s = s or lang_mod.HI

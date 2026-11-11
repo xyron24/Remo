@@ -165,7 +165,9 @@ watcher summaries. Quiz verdicts and reminder read-backs stay Hinglish-first unt
 
 Your notes, work entries, reminders, keys, and learned words stay on your machine (`~/.remo`).
 Voice goes to Gnani for transcription, text goes to Gnani for speech. Watched URLs are polled as plain public
-requests. Your notes never leave for them. The demo uses made-up data only.
+requests. Your notes never leave for them. If you set `GEMINI_API_KEY`, retrieved snippets go to Gemini so
+answers sound natural; without it, answers are composed offline from your exact words. The demo uses made-up
+data only.
 
 ## Roadmap
 
