@@ -86,6 +86,14 @@ def test_state_includes_fired_and_changes(client: TestClient, tmp_path: Path) ->
     assert body["changes"][0]["watch_url"] == "https://github.com/o/r/issues/1"
 
 
+def test_text_turn_speak_false_returns_text_only(client: TestClient) -> None:
+    body = client.post("/api/turn/text", json={"text": "yaad rakhna chai pini hai", "speak": False}).json()
+    assert body["action"] == "saved" and "Yaad kar liya" in body["text"]
+    assert body["audio_url"] is None
+    spoken = client.post("/api/turn/text", json={"text": "yaad rakhna chai pini hai"}).json()
+    assert spoken["audio_url"]
+
+
 def test_delete_endpoints_remove_each_kind(client: TestClient, tmp_path: Path) -> None:
     import os
 

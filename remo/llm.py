@@ -19,7 +19,7 @@ from remo.memory import Memory, Note
 log = get_logger("llm")
 
 DEFAULT_MODEL = "gemini-2.5-flash"
-TIMEOUT_SECONDS = 12.0
+TIMEOUT_SECONDS = 8.0
 MAX_CHARS = 600
 
 _URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"

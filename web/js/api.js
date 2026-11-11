@@ -1,20 +1,21 @@
 /* Thin wrappers over Remo's FastAPI backend. No business logic here. */
 window.RemoAPI = (() => {
-  async function turnText(text, lang, pending) {
+  async function turnText(text, lang, pending, speak = true) {
     const res = await fetch("/api/turn/text", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, lang, pending: pending || null }),
+      body: JSON.stringify({ text, lang, pending: pending || null, speak }),
     });
     if (!res.ok) throw new Error(`server said ${res.status}`);
     return res.json();
   }
 
-  async function turnAudio(wavBlob, lang, pending) {
+  async function turnAudio(wavBlob, lang, pending, speak = true) {
     const form = new FormData();
     form.append("file", wavBlob, "turn.wav");
     form.append("lang", lang);
     form.append("pending", JSON.stringify(pending || {}));
+    form.append("speak", speak ? "true" : "false");
     const res = await fetch("/api/turn/audio", { method: "POST", body: form });
     if (!res.ok) throw new Error(`server said ${res.status}`);
     return res.json();

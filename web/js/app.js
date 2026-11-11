@@ -106,7 +106,21 @@
 
   /* ---------- threads & inline player ---------- */
   const BAR_HEIGHTS = [38, 65, 90, 52, 78, 96, 62, 44, 84, 72, 48, 88, 66, 36];
-  function buildAudioPill(url) {
+  async function speakInBackground(text, pill, done) {
+    try {
+      const { audio_url } = await API.speak(text, store.lang);
+      if (pill) {
+        const btn = pill.querySelector("button");
+        if (btn) btn.onclick = () => play(audio_url, null, pill);
+      }
+      play(audio_url, done, pill);
+    } catch (err) {
+      toast(`Voice reply failed: ${err.message}`, true);
+      done && done();
+    }
+  }
+
+  function buildAudioPill(url, text) {
     const pill = document.createElement("div");
     pill.className = "audio-pill";
 
@@ -133,7 +147,11 @@
     pill.appendChild(bars);
     pill.appendChild(meta);
 
-    btn.onclick = () => play(url, null, pill);
+    if (url) {
+      btn.onclick = () => play(url, null, pill);
+    } else {
+      btn.onclick = () => speakInBackground(text, pill, null);
+    }
     return pill;
   }
 
@@ -184,8 +202,8 @@
     div.innerHTML = html;
 
     let pill = null;
-    if (data && data.audio_url) {
-      pill = buildAudioPill(data.audio_url);
+    if (data && (data.audio_url || who === "Remo")) {
+      pill = buildAudioPill(data.audio_url || null, text);
       div.appendChild(pill);
     }
     if (data) pendingChips(data, div);
@@ -199,16 +217,16 @@
     if (!value) return;
     setSide("thinking", "Thinking");
     try {
-      const data = await API.turnText(value, store.lang, store.pending);
+      const data = await API.turnText(value, store.lang, store.pending, false);
       store.pending = data.pending || null;
       showPendingChip();
       addTurn(box, "You", value, null);
       const pill = addTurn(box, "Remo", data.text, data);
-      if (!opts.quiet && store.autoplay && data.audio_url) {
+      refresh();
+      if (!opts.quiet && store.autoplay) {
         setSide("speaking", "Speaking");
-        play(data.audio_url, () => { setSide("ready", "Ready"); refresh(); }, pill);
+        speakInBackground(data.text, pill, () => { setSide("ready", "Ready"); refresh(); });
       } else {
-        refresh();
         setSide("ready", "Ready");
       }
     } catch (err) {
@@ -242,7 +260,7 @@
         setState("processing", "Thinking…");
         setSide("thinking", "Thinking");
         try {
-          const data = await API.turnAudio(wav, store.lang, store.pending);
+          const data = await API.turnAudio(wav, store.lang, store.pending, false);
           store.pending = data.pending || null;
           showPendingChip();
           if (data.transcript) {
@@ -258,11 +276,10 @@
             setSide("ready", "Ready");
             refresh();
           };
-          if (autoPlay && store.autoplay && data.audio_url) {
-            play(data.audio_url, end, pill);
+          if (autoPlay && store.autoplay) {
+            speakInBackground(data.text, pill, end);
           } else {
             end();
-            if (data.audio_url && !store.autoplay) toast("Reply ready (autoplay is off)");
           }
         } catch (err) {
           setState("error", `Could not reach Remo (${err.message})`);

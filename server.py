@@ -68,6 +68,7 @@ class TextTurn(BaseModel):
     text: str
     lang: str | None = None
     pending: dict | None = None
+    speak: bool = True
 
 
 class Speak(BaseModel):
@@ -92,38 +93,43 @@ def _turn_payload(result: turn_mod.TurnResult, transcript: str | None = None) ->
     return payload
 
 
-def _resolve_pending(mem: Memory, text: str, pending: dict, settings: Settings) -> turn_mod.TurnResult | None:
+def _resolve_pending(
+    mem: Memory, text: str, pending: dict, settings: Settings, speak: bool
+) -> turn_mod.TurnResult | None:
     """Route one message against carried-over pending state (quiz/remind/confirm)."""
     action = (pending or {}).get("action")
     if action == "quiz":
-        return turn_mod.answer_quiz(mem, pending, text, settings=settings, speak=True)
+        return turn_mod.answer_quiz(mem, pending, text, settings=settings, speak=speak)
     if action == "remind_ask":
-        return turn_mod.complete_remind_task(mem, pending, text, settings=settings, speak=True)
+        return turn_mod.complete_remind_task(mem, pending, text, settings=settings, speak=speak)
     if action in ("undo", "forget", "remind"):
-        decided = turn_mod.confirm_pending_text(mem, pending, text, settings=settings, speak=True)
+        decided = turn_mod.confirm_pending_text(mem, pending, text, settings=settings, speak=speak)
         if decided is None:
             from remo import lang as lang_mod
 
             ask = lang_mod.strings(settings.language)["ask_yes_no"]
             audio = None
-            try:
-                audio = synthesize(ask, settings=settings)
-            except Exception as exc:  # noqa: BLE001 - voice-out must never kill the turn
-                log.warning("voice-out failed: %s", exc)
+            if speak:
+                try:
+                    audio = synthesize(ask, settings=settings)
+                except Exception as exc:  # noqa: BLE001 - voice-out must never kill the turn
+                    log.warning("voice-out failed: %s", exc)
             return turn_mod.TurnResult(text=ask, audio=audio, action="confirm_ask", pending=pending)
         return decided
     return None
 
 
-def _route_text(mem: Memory, text: str, pending: dict | None, settings: Settings) -> turn_mod.TurnResult:
+def _route_text(
+    mem: Memory, text: str, pending: dict | None, settings: Settings, speak: bool = True
+) -> turn_mod.TurnResult:
     # A fresh save keyword always wins (it also drops stale pending state).
     if kw.match_save_keyword(text) is not None:
-        return turn_mod.handle_text(text, mem=mem, settings=settings, speak=True)
+        return turn_mod.handle_text(text, mem=mem, settings=settings, speak=speak)
     if pending:
-        resolved = _resolve_pending(mem, text, pending, settings)
+        resolved = _resolve_pending(mem, text, pending, settings, speak)
         if resolved is not None:
             return resolved
-    return turn_mod.handle_text(text, mem=mem, settings=settings, speak=True)
+    return turn_mod.handle_text(text, mem=mem, settings=settings, speak=speak)
 
 
 @app.get("/", include_in_schema=False)
@@ -141,7 +147,7 @@ def turn_text(body: TextTurn, mem: Memory = Depends(mem_dep)) -> JSONResponse:  
     settings = _settings_for(body.lang)
     if not body.text.strip():
         raise HTTPException(status_code=400, detail="empty text")
-    result = _route_text(mem, body.text, body.pending, settings)
+    result = _route_text(mem, body.text, body.pending, settings, body.speak)
     return JSONResponse(_turn_payload(result))
 
 
@@ -150,10 +156,12 @@ def turn_audio(
     file: UploadFile = File(...),
     lang: str = Form("hi-IN"),
     pending: str = Form("{}"),
+    speak: str = Form("true"),
     mem: Memory = Depends(mem_dep),  # noqa: B008
 ) -> JSONResponse:
     """Sync endpoint: the STT stream runs its own loop; blocking I/O throughout."""
     settings = _settings_for(lang)
+    voice_out = speak.strip().lower() not in ("false", "0", "no", "off")
     try:
         pending_obj = json.loads(pending) if pending else None
     except json.JSONDecodeError:
@@ -185,14 +193,15 @@ def turn_audio(
 
         ask = lang_mod.strings(settings.language)["prompt_repeat"]
         audio = None
-        try:
-            audio = synthesize(ask, settings=settings)
-        except Exception as exc:  # noqa: BLE001 - voice-out must never kill the turn
-            log.warning("voice-out failed: %s", exc)
+        if voice_out:
+            try:
+                audio = synthesize(ask, settings=settings)
+            except Exception as exc:  # noqa: BLE001 - voice-out must never kill the turn
+                log.warning("voice-out failed: %s", exc)
         return JSONResponse(_turn_payload(
             turn_mod.TurnResult(text=ask, audio=audio, action="repeat"), transcript=""
         ))
-    result = _route_text(mem, transcript, pending_obj, settings)
+    result = _route_text(mem, transcript, pending_obj, settings, voice_out)
     return JSONResponse(_turn_payload(result, transcript=transcript))
 
 
