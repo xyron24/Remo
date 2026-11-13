@@ -696,6 +696,18 @@
         if ($("voice-hi")) $("voice-hi").textContent = i.voices["hi-IN"] || "";
         if ($("voice-mr")) $("voice-mr").textContent = i.voices["mr-IN"] || "";
       }
+      const pretty = (m) => {
+        if (!m) return "";
+        const [name, ...rest] = m.split("-");
+        return name.charAt(0).toUpperCase() + name.slice(1) + (rest.length ? ` ${rest.join("-")}` : "");
+      };
+      if ($("model-pill") && i.stt_model && i.tts_model) {
+        $("model-pill").textContent = `${pretty(i.stt_model)} · ${pretty(i.tts_model)}`;
+      }
+      if ($("voice-models-line") && i.stt_model && i.tts_model) {
+        $("voice-models-line").textContent =
+          `How Remo listens via ${pretty(i.stt_model)}, speaks via ${pretty(i.tts_model)}, and adapts to your vocabulary.`;
+      }
       $("app-info").innerHTML =
         `<dt>Version</dt><dd>${esc(i.version)}</dd><dt>Server language</dt><dd>${esc(i.language)}</dd>` +
         `<dt>Voice</dt><dd>${esc(i.voice)}</dd><dt>STT</dt><dd>${esc(i.stt_model)}</dd><dt>TTS</dt><dd>${esc(i.tts_model)}</dd>`;

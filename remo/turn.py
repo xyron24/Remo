@@ -210,8 +210,13 @@ def _welcome_turn(mem: Memory, settings: Settings, speak: bool, s: dict) -> Turn
     return _speak(say, "welcome", settings, speak, links=links)
 
 
-def _recall_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: dict) -> TurnResult:
+def _recall_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: dict,
+                 _romanized: bool = False) -> TurnResult:
     """Day plan, left-off, or general recall over one question."""
+    if not _romanized and settings.gemini_api_keys and not recall_mod.hybrid_search(mem, text, limit=3):
+        latin = llm_mod.romanize_query(text, settings)
+        if latin and latin.strip() != text.strip():
+            return _recall_turn(latin, mem=mem, settings=settings, speak=speak, s=s, _romanized=True)
     day_plan = briefing_mod.wants_day_plan(text)
     if day_plan is not None:
         return _speak(briefing_mod.compose_day_plan(mem, day_plan, s=s), "plan", settings, speak)

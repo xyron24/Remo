@@ -236,18 +236,55 @@ def parse_intent(transcript: str, *, context: str = "", model: str = "",
     return parsed
 
 
-def recall_context(mem: Memory, text: str) -> str:
+_ROMANIZE_SYSTEM = (
+    "Rewrite this Hinglish, Hindi, or Marathi question in Latin (Roman) script, keeping English "
+    "words in their English spelling. Reply with ONLY the rewritten question, no quotes, "
+    "no explanation."
+)
+
+
+def romanize_query(text: str, settings: Settings, timeout: float = TIMEOUT_SECONDS) -> str | None:
+    """Romanize a no-match query so Latin-script notes can match; None on failure."""
+    if not settings.gemini_api_keys or not text.strip():
+        return None
+    out = _generate(
+        [{"text": text.strip()}],
+        _ROMANIZE_SYSTEM,
+        models=list(settings.gemini_models),
+        api_keys=list(settings.gemini_api_keys),
+        timeout=timeout, max_tokens=100, json_mode=False,
+    )
+    if not out:
+        return None
+    return out.strip().strip("'\"").strip() or None
+
+
+def search_with_romanize(mem: Memory, query: str, settings: Settings,
+                         limit: int = 3) -> list[Note]:
+    """Token search, plus a romanized retry when nothing matches (cross-script)."""
+    hits = recall_mod.hybrid_search(mem, query, limit=limit)
+    if hits or not settings.gemini_api_keys:
+        return hits
+    latin = romanize_query(query, settings)
+    if not latin or latin.strip() == query.strip():
+        return hits
+    return recall_mod.hybrid_search(mem, latin, limit=limit)
+
+
+def recall_context(mem: Memory, text: str, settings: Settings | None = None) -> str:
     """Local retrieval first: recent + matching notes, tasks, reminders."""
     seen: set[int] = set()
     notes: list[str] = []
-    for note in mem.list_recent(3) + recall_mod.hybrid_search(mem, text, limit=3):
+    matched = (search_with_romanize(mem, text, settings, limit=5)
+               if settings is not None else recall_mod.hybrid_search(mem, text, limit=5))
+    for note in mem.list_recent(5) + matched:
         if note.id not in seen:
             seen.add(note.id)
             notes.append(note.text[:120])
     tasks = [p[:100] for e in mem.list_work_entries(limit=5) for p in e.pending[:2]]
     rems = [r.text[:100] for r in mem.list_armed()[:3]]
     lines = ["Recent/matching memories:"]
-    lines += [f"- {n}" for n in notes[:6]] or ["- (none)"]
+    lines += [f"- {n}" for n in notes[:10]] or ["- (none)"]
     lines += ["Open tasks:"]
     lines += [f"- {t}" for t in tasks[:5]] or ["- (none)"]
     lines += ["Armed reminders:"]
@@ -259,7 +296,7 @@ def try_intent(text: str, mem: Memory, settings: Settings) -> dict | None:
     """Parse when a key is configured, else None (patterns take over)."""
     if not settings.gemini_api_keys:
         return None
-    return parse_intent(text, context=recall_context(mem, text),
+    return parse_intent(text, context=recall_context(mem, text, settings),
                         models=list(settings.gemini_models),
                         api_keys=list(settings.gemini_api_keys))
 

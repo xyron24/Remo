@@ -162,6 +162,34 @@ def test_llm_other_speaks_guarded_reply(mem: Memory, monkeypatch: pytest.MonkeyP
     assert result.text == "Namaste! Kaise ho?"
 
 
+def test_devanagari_question_finds_english_note_via_romanize(
+    mem: Memory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from remo import llm as llm_mod
+    from remo import turn as turn_mod
+
+    _run("yaad rakhna Integration is the reverse of differentiation", mem)
+    monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: None)
+    monkeypatch.setattr(llm_mod, "romanize_query", lambda *a, **k: "integration kya hota hai")
+    monkeypatch.setattr(llm_mod, "try_compose", lambda *a, **k: None)
+    settings = Settings(gnani_api_key="test-key", gemini_api_keys=("g-test",))
+    result = turn_mod.handle_text("इंटीग्रेशन क्या होता है", mem=mem, settings=settings, speak=False)
+    assert result.action == "recall"
+    assert "Integration" in result.text
+
+
+def test_romanize_failure_keeps_honest_empty_answer(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from remo import llm as llm_mod
+    from remo import turn as turn_mod
+
+    monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: None)
+    monkeypatch.setattr(llm_mod, "romanize_query", lambda *a, **k: None)
+    monkeypatch.setattr(llm_mod, "try_compose", lambda *a, **k: None)
+    settings = Settings(gnani_api_key="test-key", gemini_api_keys=("g-test",))
+    result = turn_mod.handle_text("sahara desert safari kab hai?", mem=mem, settings=settings, speak=False)
+    assert "yaad nahi" in result.text
+
+
 def test_llm_recall_uses_single_call_reply(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
     from remo import llm as llm_mod
     from remo import turn as turn_mod
