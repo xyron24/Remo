@@ -1,7 +1,15 @@
 """Memory: notes CRUD, dual-script search, vectors, learned lists."""
 from pathlib import Path
 
-from remo.memory import EMBED_DIM, HashEmbedder, Memory, content_tokens, cosine, transliterate_latin
+from remo.memory import (
+    EMBED_DIM,
+    HashEmbedder,
+    Memory,
+    content_tokens,
+    cosine,
+    fold_text,
+    transliterate_latin,
+)
 
 
 def test_add_get_list_and_forget(tmp_path: Path) -> None:
@@ -40,6 +48,12 @@ def test_content_tokens_bridge_latin_and_devanagari() -> None:
     latin = set(content_tokens("kal ghar ki safai krni hai?"))
     deva = set(content_tokens("मुझे कल घर की सफाई करनी है।"))
     assert {"kal", "ghar", "safai"} <= latin & deva
+
+
+def test_fold_text_and_chandrakala_o() -> None:
+    assert fold_text("क्या बचा है") == "kya bacha hai"
+    assert fold_text("याद दिला देना") == "yad dila dena"
+    assert transliterate_latin("वॉच") == "voch"
 
 
 def test_notes_carry_latin_fold_and_embedding(tmp_path: Path) -> None:

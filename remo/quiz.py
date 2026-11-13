@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 from remo import recall as recall_mod
 from remo.brain_keywords import normalize
-from remo.memory import HashEmbedder, Memory, Note, cosine
+from remo.memory import HashEmbedder, Memory, Note, content_tokens, cosine, fold_text
 
 STOPWORDS = frozenset(
     "ke ki ka ko mein me main ne se par aur yaar bhi to hi tha thi the thaye gaya gayi gaye hua hue hui "
@@ -56,7 +56,18 @@ class QuizSession:
 
 
 def is_quiz_request(text: str) -> bool:
-    return any(marker in normalize(text) for marker in QUIZ_MARKERS)
+    norm = normalize(text)
+    if any(marker in norm for marker in QUIZ_MARKERS):
+        return True
+    if "क्विज" in norm:
+        return True
+    folded = fold_text(text)
+    if any(fold_text(marker) in folded for marker in QUIZ_MARKERS):
+        return True
+    toks = set(content_tokens(text))
+    if "kviz" in toks:
+        return True
+    return "saval" in toks and not toks.isdisjoint({"pucho", "puchho"})
 
 
 def is_stop(text: str) -> bool:
@@ -84,6 +95,8 @@ def start_quiz(mem: Memory, topic: str | None = None, total: int = MAX_QUESTIONS
         if len(picked) >= total:
             break
     if not picked:
+        if topic:
+            return None, f"'{topic}' par kuch yaad nahi hai. Koi aur topic bolo?"
         return None, "Quiz ke liye notes kam hain. Pehle kuch yaad karwao."
     session = QuizSession(note_ids=[n.id for n in picked], total=len(picked))
     return _ask(mem, session)

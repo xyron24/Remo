@@ -7,7 +7,7 @@ from remo.answers import parse_yes_no
 @pytest.mark.parametrize(
     "said",
     ["haan", "Haan", "han", "ha", "haanji", "yes", "yeah", "yep", "ok", "theek hai", "kar do",
-     "hoy", "ho", "हाँ", "हां", "हान", "जी", "होय"],
+     "hoy", "ho", "हाँ", "हां", "हान", "जी", "होय", "ठीक है", "कर दो"],
 )
 def test_yes_variants(said: str) -> None:
     assert parse_yes_no(said) is True
@@ -15,7 +15,8 @@ def test_yes_variants(said: str) -> None:
 
 @pytest.mark.parametrize(
     "said",
-    ["nahi", "nahin", "no", "nope", "mat karo", "rehne do", "na", "नहीं", "नही", "ना"],
+    ["nahi", "nahin", "no", "nope", "mat karo", "rehne do", "na", "नहीं", "नही", "ना",
+     "रहने दो", "मत करो"],
 )
 def test_no_variants(said: str) -> None:
     assert parse_yes_no(said) is False

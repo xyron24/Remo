@@ -32,7 +32,7 @@ _DEVA_BASE = {
 
 _DEVA_SIGNS = {
     "अ": "a", "आ": "aa", "इ": "i", "ई": "ee", "उ": "u", "ऊ": "oo",
-    "ए": "e", "ऐ": "ai", "ओ": "o", "औ": "au",
+    "ए": "e", "ऐ": "ai", "ओ": "o", "औ": "au", "ॉ": "o",
     "ा": "aa", "ि": "i", "ी": "ee", "ु": "u", "ू": "oo",
     "े": "e", "ै": "ai", "ो": "o", "ौ": "au",
     "ं": "n", "ँ": "n", "ः": "h",
@@ -154,6 +154,26 @@ def _loose(tok: str) -> str:
     return tok
 
 
+def fold_word(word: str) -> str:
+    """One natural-spelling word into folded space ("what" -> "vhat").
+
+    Matcher sets are written naturally and folded once, so hand-written sets
+    can never drift from what the fold actually produces.
+    """
+    return _loose(word.lower())
+
+
+def fold_text(text: str) -> str:
+    """Whole-text loose-Latin fold for intent matching ("क्या बचा" -> "kya bacha").
+
+    Unlike content_tokens, nothing is dropped: question words survive so
+    classifiers can see them in either script.
+    """
+    return " ".join(
+        _loose(tok) for tok in re.findall(r"[a-z0-9]+", transliterate_latin(text).lower())
+    )
+
+
 def content_tokens(text: str) -> list[str]:
     """Topic tokens: Devanagari folded to Latin, spellings bridged, stopwords
     dropped. Digits always count ("2 din baad"); alpha tokens need 2+ letters
@@ -227,6 +247,17 @@ class WorkEntry:
     pending: list[str]
     created_at: float
     updated_at: float
+
+
+@dataclass
+class User:
+    id: int
+    email: str
+    name: str
+    avatar_url: str
+    provider: str
+    password_hash: str
+    created_at: float
 
 
 @dataclass
@@ -309,6 +340,21 @@ CREATE TABLE IF NOT EXISTS changes (
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL DEFAULT '',
+    avatar_url TEXT NOT NULL DEFAULT '',
+    provider TEXT NOT NULL DEFAULT 'email',
+    password_hash TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL
 );
 """
 
@@ -475,6 +521,74 @@ class Memory:
         self.db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
         self.db.commit()
 
+    # -- users + sessions -------------------------------------------------
+    def create_user(
+        self, email: str, name: str = "", avatar_url: str = "",
+        provider: str = "email", password_hash: str = "",
+    ) -> User:
+        now = time.time()
+        cur = self.db.execute(
+            "INSERT INTO users (email, name, avatar_url, provider, password_hash, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (email.strip().lower(), name.strip(), avatar_url, provider, password_hash, now),
+        )
+        self.db.commit()
+        return self.get_user(cur.lastrowid or 0)  # type: ignore[return-value]
+
+    def find_user_by_email(self, email: str) -> User | None:
+        row = self.db.execute(
+            "SELECT * FROM users WHERE email = ?", (email.strip().lower(),)
+        ).fetchone()
+        return self._user_from(row) if row else None
+
+    def get_user(self, user_id: int) -> User | None:
+        row = self.db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return self._user_from(row) if row else None
+
+    def update_user(self, user_id: int, name: str = "", avatar_url: str = "") -> None:
+        if name:
+            self.db.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
+        if avatar_url:
+            self.db.execute("UPDATE users SET avatar_url = ? WHERE id = ?", (avatar_url, user_id))
+        self.db.commit()
+
+    def create_session(self, user_id: int, token_hash: str, ttl_seconds: float) -> None:
+        now = time.time()
+        self.db.execute(
+            "INSERT OR REPLACE INTO sessions (token_hash, user_id, created_at, expires_at)"
+            " VALUES (?, ?, ?, ?)",
+            (token_hash, user_id, now, now + ttl_seconds),
+        )
+        self.db.commit()
+
+    def get_session_user(self, token_hash: str, now: float | None = None) -> User | None:
+        row = self.db.execute(
+            "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id"
+            " WHERE s.token_hash = ? AND s.expires_at > ?",
+            (token_hash, time.time() if now is None else now),
+        ).fetchone()
+        return self._user_from(row) if row else None
+
+    def delete_session(self, token_hash: str) -> None:
+        self.db.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
+        self.db.commit()
+
+    def delete_user_sessions(self, user_id: int) -> None:
+        self.db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        self.db.commit()
+
+    @staticmethod
+    def _user_from(row: sqlite3.Row) -> User:
+        return User(
+            id=row["id"],
+            email=row["email"],
+            name=row["name"],
+            avatar_url=row["avatar_url"],
+            provider=row["provider"],
+            password_hash=row["password_hash"],
+            created_at=row["created_at"],
+        )
+
     # -- work entries ---------------------------------------------------
     def upsert_work_entry(
         self, persona: str, org: str, issue_ref: str, done: list[str], pending: list[str]
@@ -523,7 +637,7 @@ class Memory:
         for row in rows:
             org_ok = not org or row["org"].lower() == org.lower()
             ref_ok = not issue_ref or row["issue_ref"].lower() == issue_ref.lower()
-            if org_ok and ref_ok and (org or issue_ref):
+            if org_ok and ref_ok and (org or issue_ref or (row["org"] == "" and row["issue_ref"] == "")):
                 return self._entry_from(row)
         return None
 

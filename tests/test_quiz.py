@@ -61,3 +61,17 @@ def test_session_serializes(mem: Memory) -> None:
     assert session is not None
     clone = Q.QuizSession.from_dict(session.to_dict())
     assert clone == session
+
+
+def test_unknown_topic_says_so(mem: Memory) -> None:
+    session, say = Q.start_quiz(mem, topic="sanskrit")
+    assert session is None
+    assert "sanskrit" in say and "koi aur topic" in say.lower()
+
+
+def test_empty_memory_asks_for_notes_first(tmp_path: Path) -> None:
+    empty = Memory(tmp_path / "empty.db")
+    session, say = Q.start_quiz(empty)
+    assert session is None
+    assert "yaad karwao" in say
+    empty.close()

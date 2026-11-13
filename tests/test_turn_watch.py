@@ -83,6 +83,27 @@ def test_updates_poll_and_brief_with_links(mem: Memory) -> None:
     assert mem.unbriefed_changes() == [], "briefed once, never repeated"
 
 
+def test_devanagari_watch_and_update_route(mem: Memory) -> None:
+    from unittest import mock
+
+    from remo import watcher as watcher_mod
+
+    watched = _run("वॉच करो https://github.com/o/r/issues/1", mem)
+    assert watched.action == "watching"
+
+    def fake_poll_all(mem_inner, token="", fetch=None, lang="hi"):
+        item = mem_inner.list_watched()[0]
+        mem_inner.store_changes(item.id, [("Naya comment aaya.", "LGTM", "https://x/c1", 1.0)])
+        return watcher_mod.PollReport(checked=1, new_changes=1, checked_at=1730000000.0)
+
+    with mock.patch.object(watcher_mod, "poll_all", fake_poll_all):
+        result = _run("कोई अपडेट आया", mem)
+    assert result.action == "updates"
+    assert "Naya comment" in result.text
+    assert result.links == ["https://x/c1"]
+    assert mem.unbriefed_changes() == [], "briefed once, never repeated"
+
+
 def test_updates_degrade_honestly_on_errors(mem: Memory) -> None:
     from remo import watcher as watcher_mod
     from unittest import mock
@@ -95,6 +116,22 @@ def test_updates_degrade_honestly_on_errors(mem: Memory) -> None:
     with mock.patch.object(watcher_mod, "poll_all", failing_poll):
         result = _run("koi update?", mem)
     assert "sampark nahi" in result.text
+
+
+def test_welcome_briefing_prefers_llm_text(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from remo import llm as llm_mod
+
+    _run("yaad rakhna issue 214: docs baaki hai", mem)
+    watched = mem.watch_url("github_issue", "https://github.com/o/r/issues/214")
+    mem.store_changes(watched.id, [("Naya comment.", "q", "https://x/1", 1.0)])
+    monkeypatch.setattr(
+        llm_mod, "try_briefing", lambda *a, **k: "Docs baaki hai, aur ek naya comment aaya."
+    )
+    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    result = turn.handle_text("welcome back", mem=mem, settings=settings, speak=False)
+    assert result.action == "welcome"
+    assert "naya comment" in result.text
+    assert result.links == ["https://x/1"]
 
 
 def test_welcome_back_combines_pending_and_deltas(mem: Memory) -> None:

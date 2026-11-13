@@ -6,6 +6,7 @@ never guess "no".
 from __future__ import annotations
 
 from remo.brain_keywords import normalize
+from remo.memory import fold_text
 
 YES_WORDS = frozenset(
     {
@@ -25,7 +26,7 @@ NO_WORDS = frozenset(
 
 YES_PHRASES = ("theek hai", "thik hai", "kar do", "haan kar do", "bilkul")
 
-NO_PHRASES = ("mat karo", "rehne do", "rehne de", "no thanks", "bilkul nahi")
+NO_PHRASES = ("mat karo", "rehne do", "rehne de", "no thanks", "bilkul nahi", "रहने दो", "रहने दे", "मत करो")
 
 UNCLEAR_PHRASES = ("pata nahi", "malum nahi", "maloom nahi", "don't know", "dont know", "samajh nahi", "kya kaha")
 
@@ -37,11 +38,22 @@ def parse_yes_no(text: str) -> bool | None:
         return False
     if norm in ("ho", "हो"):  # bare Marathi "ho" is yes; "ho" inside Hinglish verbs is not
         return True
+    folded = fold_text(text)
     if any(phrase in norm for phrase in UNCLEAR_PHRASES):
         return None
+    if any(fold_text(phrase) in folded for phrase in UNCLEAR_PHRASES):
+        return None
     words = set(norm.split())
-    yes = not words.isdisjoint(YES_WORDS) or any(p in norm for p in YES_PHRASES)
-    no = not words.isdisjoint(NO_WORDS) or any(p in norm for p in NO_PHRASES)
+    yes = (
+        not words.isdisjoint(YES_WORDS)
+        or any(p in norm for p in YES_PHRASES)
+        or any(fold_text(p) in folded for p in YES_PHRASES)
+    )
+    no = (
+        not words.isdisjoint(NO_WORDS)
+        or any(p in norm for p in NO_PHRASES)
+        or any(fold_text(p) in folded for p in NO_PHRASES)
+    )
     if yes and no:
         return None
     if yes:

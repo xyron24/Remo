@@ -45,6 +45,8 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+body { animation: page-in 0.25s ease; }
+@keyframes page-in { from { opacity: 0; } }
 body {
   margin: 0;
   color: var(--ink);

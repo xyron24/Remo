@@ -11,18 +11,29 @@ import re
 from remo import lang as lang_mod
 from remo import reminders as reminders_mod
 from remo.brain_keywords import normalize
-from remo.memory import Memory, Note
+from remo.memory import Memory, Note, content_tokens, fold_text, fold_word
+
+# Obligation verbs ("X karni hai" = X is still to do), enumerated per verb so
+# lookalike nouns ("khana", "gana", "purana") never count as pending.
+_PENDING_VERBS_LATIN = r"(?:karna|karni|karne|lena|leni|lene|dena|deni|dene|aana|aani|jaana|jaani|banana|banani|padhna|likhna|lana|pina)"
+_PENDING_VERBS_DEVA = r"(?:करना|करनी|करने|लेना|लेनी|लेने|देना|देनी|देने|आना|आनी|जाना|जानी|बनाना|बनानी|पढ़ना|लिखना|लाना|पीना)"
 
 _PENDING_PAT = re.compile(
-    r"baaki|baki|bacha|bache|left|pending|reh gay|karna hai|karne|to[\s-]?do|adhur"
-    r"|बाकी|बकि|बचा|बचे|करना|करनी|करने|अधूर|रह ग|राहिल|करायच",
+    r"baaki|baki|bacha|bache|left|pending|reh gay|karne|to[\s-]?do|adhur"
+    r"|\b" + _PENDING_VERBS_LATIN + r"\s+hain?\b"
+    r"|बाकी|बकि|बचा|बचे|अधूर|रह ग|राहिल|करायच"
+    r"|\b" + _PENDING_VERBS_DEVA + r"\s+हैं?",
     re.IGNORECASE,
 )
 
 _LEFT_OFF_MARKERS = (
     "kya bacha",
+    "kya bache",
     "kya baaki",
     "kya baki",
+    "kya task",
+    "kya kaam",
+    "kaun se task",
     "kya reh gay",
     "kya chhuta",
     "what is left",
@@ -36,6 +47,19 @@ _LEFT_OFF_MARKERS = (
     "kay baki",
     "kay shillak",
     "kay rahila aahe",
+)
+
+# Token rule for what phrases miss across scripts: a question word plus a
+# left-over word, both in folded form ("क्या टास्क बचे" -> kya + task + bache).
+_LEFT_Q_WORDS = frozenset(
+    fold_word(w)
+    for w in {"kya", "kaun", "kay", "kon", "what", "batao", "sanga", "sang", "tell", "show",
+              "list", "dikhao", "dikha", "dakhava"}
+)
+_LEFT_WORDS = frozenset(
+    fold_word(w)
+    for w in {"bacha", "bache", "baaki", "baki", "pending", "left", "task", "tasks", "reh",
+              "rahila", "shillak"}
 )
 
 _QUESTION_WORDS = (
@@ -63,6 +87,24 @@ _QUESTION_WORDS = (
     "kashi",
     "sanga",
     "sang",
+    "क्या",
+    "कब",
+    "कौन",
+    "किस",
+    "कितना",
+    "कितने",
+    "कैसे",
+    "क्यों",
+    "क्यूं",
+    "कहाँ",
+    "बताओ",
+    "सुनाओ",
+    "काय",
+    "केव्हा",
+    "कोण",
+    "कसा",
+    "कशी",
+    "सांगा",
 )
 
 _MAX_READ = 140
@@ -85,7 +127,13 @@ def hybrid_search(mem: Memory, query: str, limit: int = 5) -> list[Note]:
 
 def is_left_off_query(text: str) -> bool:
     norm = normalize(text)
-    return any(marker in norm for marker in _LEFT_OFF_MARKERS)
+    if any(marker in norm for marker in _LEFT_OFF_MARKERS):
+        return True
+    folded = fold_text(text)
+    if any(fold_text(marker) in folded for marker in _LEFT_OFF_MARKERS):
+        return True
+    words = set(folded.split())
+    return not words.isdisjoint(_LEFT_Q_WORDS) and not set(content_tokens(text)).isdisjoint(_LEFT_WORDS)
 
 
 def is_recall_query(text: str) -> bool:
@@ -129,17 +177,24 @@ def _short(text: str, limit: int = _MAX_READ) -> str:
     return text if len(text) <= limit else text[:limit].rstrip() + "…"
 
 
-def compose_left_off(notes: list[Note], s: dict | None = None) -> str:
-    """Pending-first briefing over recent notes."""
+def compose_left_off(notes: list[Note], s: dict | None = None,
+                     extra: list[str] | None = None) -> str:
+    """Pending-first briefing over recent notes plus extra to-dos (e.g. work entries)."""
     s = s or lang_mod.HI
+    pending = [n for n in notes if _PENDING_PAT.search(f"{n.text} {n.text_latin}")]
+    shown = [_short(n.text) for n in pending[:3]]
+    if extra:
+        for item in extra:
+            low = item.strip().lower()
+            if low and not any(low in s.lower() or s.lower() in low for s in shown):
+                shown.append(_short(item))
+    if shown:
+        items = "; ".join(shown[:4])
+        tail_count = (len(notes) - len(pending)) + max(0, len(shown) - 4)
+        tail = s["left_off_extra"].format(n=tail_count) if tail_count > 0 else ""
+        return s["left_off_pending"].format(items=items) + tail
     if not notes:
         return s["left_off_none"]
-    pending = [n for n in notes if _PENDING_PAT.search(f"{n.text} {n.text_latin}")]
-    if pending:
-        items = "; ".join(_short(n.text) for n in pending[:3])
-        extra = len(notes) - len(pending)
-        tail = s["left_off_extra"].format(n=extra) if extra > 0 else ""
-        return s["left_off_pending"].format(items=items) + tail
     return s["left_off_all_done"].format(latest=_short(notes[0].text))
 
 

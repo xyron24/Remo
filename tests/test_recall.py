@@ -40,10 +40,44 @@ def test_left_off_classifier(said: str) -> None:
     assert R.is_left_off_query(said) is True
 
 
+@pytest.mark.parametrize(
+    "said",
+    [
+        "kya task bache hain?",
+        "kya kaam bacha hai?",
+        "kaun se task bache hain?",
+        "show my tasks",
+        "क्या टास्क बचे हैं",
+        "क्या बचा है",
+        "कौन से टास्क बचे हैं",
+        "क्या काम बचा है",
+    ],
+)
+def test_left_off_classifier_tasks_and_devanagari(said: str) -> None:
+    assert R.is_left_off_query(said) is True
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "differential ka kya haal hai?",
+        "server ka kya hua?",
+        "kal kya kaha tha?",
+    ],
+)
+def test_left_off_rejects_state_and_past_questions(said: str) -> None:
+    assert R.is_left_off_query(said) is False
+
+
 @pytest.mark.parametrize("said", ["kal kya kaha tha?", "tum kaun ho", "issue 214 batao"])
 def test_recall_classifier(said: str) -> None:
     assert R.is_recall_query(said) is True
     assert R.is_left_off_query(said) is False
+
+
+@pytest.mark.parametrize("said", ["क्या हाल है?", "कल क्या कहा था?", "तुम कौन हो"])
+def test_recall_classifier_devanagari(said: str) -> None:
+    assert R.is_recall_query(said) is True
 
 
 def test_left_off_is_pending_first(mem: Memory) -> None:

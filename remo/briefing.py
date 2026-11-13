@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from remo import lang as lang_mod
 from remo import recall as recall_mod
 from remo.brain_keywords import normalize
-from remo.memory import Memory, content_tokens
+from remo.memory import Memory, content_tokens, fold_text
 
 PLAN_MARKERS = (
     "aaj ka plan",
@@ -74,6 +74,9 @@ def plan_day(text: str) -> str | None:
 def is_plan_query(text: str) -> bool:
     norm = normalize(text)
     if any(marker in norm for marker in PLAN_MARKERS):
+        return True
+    folded = fold_text(text)
+    if any(fold_text(marker) in folded for marker in PLAN_MARKERS):
         return True
     if _PLAN_WORD.search(norm) is None:
         return False

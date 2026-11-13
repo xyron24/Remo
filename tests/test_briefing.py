@@ -25,7 +25,9 @@ def test_plan_empty_state(tmp_path: Path) -> None:
     mem.close()
 
 
-@pytest.mark.parametrize("said", ["aaj ka plan batao", "today's plan", "subah ka plan"])
+@pytest.mark.parametrize(
+    "said", ["aaj ka plan batao", "today's plan", "subah ka plan", "आज का प्लान बताओ"]
+)
 def test_plan_queries(said: str) -> None:
     assert B.is_plan_query(said) is True
 

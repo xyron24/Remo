@@ -17,18 +17,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from remo import auth as auth_mod
 from remo import boost as boost_mod
 from remo import brain_keywords as kw
+from remo import llm as llm_mod
 from remo import turn as turn_mod
 from remo.capture.audio import downsample_mono16
 from remo.config import Settings, load_settings
 from remo.log import get_logger
-from remo.memory import Memory
+from remo.memory import Memory, User
 from remo.paths import data_dir
 from remo import reminders as reminders_mod
 from remo.stt import transcribe_file_rest, transcribe_pcm
@@ -137,12 +139,182 @@ def index() -> FileResponse:
     return FileResponse(ROOT / "landing" / "landing.html")
 
 
+def _session_user(request: Request, mem: Memory) -> User | None:
+    token = request.cookies.get(auth_mod.SESSION_COOKIE, "")
+    if not token:
+        return None
+    return mem.get_session_user(auth_mod.hash_token(token))
+
+
+def current_user(request: Request, mem: Memory = Depends(mem_dep)) -> User:  # noqa: B008
+    user = _session_user(request, mem)
+    if user is None:
+        raise HTTPException(status_code=401, detail="sign in required")
+    return user
+
+
+def _user_payload(user: User) -> dict:
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "avatar_url": user.avatar_url,
+        "provider": user.provider,
+        "created_at": user.created_at,
+    }
+
+
+def _start_session(mem: Memory, user: User, secure: bool) -> str:
+    token = auth_mod.new_session_token()
+    mem.create_session(user.id, auth_mod.hash_token(token), auth_mod.SESSION_TTL_SECONDS)
+    return token
+
+
+def _set_session_cookie(response: JSONResponse | RedirectResponse, token: str, secure: bool) -> None:
+    response.set_cookie(auth_mod.SESSION_COOKIE, token, **auth_mod.session_cookie_kwargs(secure))
+
+
+@app.get("/login", include_in_schema=False)
+def login_page(request: Request, mem: Memory = Depends(mem_dep)):  # noqa: B008
+    if _session_user(request, mem) is not None:
+        return RedirectResponse("/app", status_code=302)
+    return FileResponse(ROOT / "web" / "login.html")
+
+
 @app.get("/app", include_in_schema=False)
-def webapp() -> FileResponse:
+def webapp(request: Request, mem: Memory = Depends(mem_dep)):  # noqa: B008
+    if _session_user(request, mem) is None:
+        return RedirectResponse("/login", status_code=302)
     return FileResponse(ROOT / "web" / "app.html")
 
 
-@app.post("/api/turn/text")
+class Register(BaseModel):
+    name: str = ""
+    email: str = ""
+    password: str = ""
+
+
+class Login(BaseModel):
+    email: str = ""
+    password: str = ""
+
+
+@app.post("/api/auth/register")
+def auth_register(body: Register, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
+    settings = load_settings()
+    email = body.email.strip().lower()
+    if not auth_mod.valid_email(email):
+        raise HTTPException(status_code=400, detail="enter a valid email address")
+    if not auth_mod.valid_password(body.password):
+        raise HTTPException(status_code=400, detail="password needs at least 8 characters")
+    if mem.find_user_by_email(email) is not None:
+        raise HTTPException(status_code=409, detail="that email is already registered; sign in instead")
+    import sqlite3
+
+    try:
+        user = mem.create_user(
+            email,
+            name=body.name.strip() or email.split("@")[0],
+            password_hash=auth_mod.hash_password(body.password),
+        )
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="that email is already registered; sign in instead") from None
+    # Registered, not signed in: the client returns to the login form.
+    return JSONResponse({"user": _user_payload(user)})
+
+
+@app.post("/api/auth/login")
+def auth_login(body: Login, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
+    settings = load_settings()
+    user = mem.find_user_by_email(body.email)
+    if user is None or not user.password_hash or not auth_mod.check_password(body.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="wrong email or password")
+    token = _start_session(mem, user, settings.cookie_secure)
+    response = JSONResponse({"user": _user_payload(user)})
+    _set_session_cookie(response, token, settings.cookie_secure)
+    return response
+
+
+@app.post("/api/logout")
+def auth_logout(request: Request, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
+    token = request.cookies.get(auth_mod.SESSION_COOKIE, "")
+    if token:
+        mem.delete_session(auth_mod.hash_token(token))
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(auth_mod.SESSION_COOKIE, path="/")
+    return response
+
+
+@app.get("/api/me")
+def auth_me(user: User = Depends(current_user)) -> JSONResponse:
+    return JSONResponse({"user": _user_payload(user)})
+
+
+@app.get("/api/auth/providers")
+def auth_providers() -> JSONResponse:
+    settings = load_settings()
+    return JSONResponse({"google": bool(settings.google_client_id and settings.google_client_secret)})
+
+
+def _oauth_redirect_uri(request: Request) -> str:
+    settings = load_settings()
+    base = settings.public_url or str(request.base_url).rstrip("/")
+    return f"{base}/api/auth/google/callback"
+
+
+@app.get("/api/auth/google/start")
+def google_start(request: Request) -> RedirectResponse:
+    settings = load_settings()
+    if not settings.google_client_id or not settings.google_client_secret:
+        return RedirectResponse("/login?error=not_configured", status_code=302)
+    state = auth_mod.new_oauth_state()
+    url = auth_mod.google_auth_url(settings.google_client_id, _oauth_redirect_uri(request), state)
+    response = RedirectResponse(url, status_code=302)
+    response.set_cookie(
+        auth_mod.OAUTH_STATE_COOKIE, state, httponly=True, samesite="lax",
+        secure=settings.cookie_secure, max_age=600, path="/",
+    )
+    return response
+
+
+@app.get("/api/auth/google/callback")
+def google_callback(request: Request, mem: Memory = Depends(mem_dep)) -> RedirectResponse:  # noqa: B008
+    settings = load_settings()
+    params = request.query_params
+    if params.get("error"):
+        return RedirectResponse("/login?error=cancelled", status_code=302)
+    state, want = params.get("state", ""), request.cookies.get(auth_mod.OAUTH_STATE_COOKIE, "")
+    if not state or not want or state != want:
+        return RedirectResponse("/login?error=expired", status_code=302)
+    code = params.get("code", "")
+    try:
+        access = auth_mod.google_exchange_code(
+            settings.google_client_id, settings.google_client_secret, code, _oauth_redirect_uri(request)
+        )
+        profile = auth_mod.google_userinfo(access)
+    except Exception as exc:  # noqa: BLE001 - provider failures become a login retry
+        log.warning("google sign-in failed: %s", exc)
+        return RedirectResponse("/login?error=failed", status_code=302)
+    email = str(profile.get("email", "")).strip().lower()
+    if not email or not profile.get("email_verified"):
+        return RedirectResponse("/login?error=unverified", status_code=302)
+    user = mem.find_user_by_email(email)
+    if user is None:
+        user = mem.create_user(
+            email, name=str(profile.get("name", "") or email.split("@")[0]),
+            avatar_url=str(profile.get("picture", "")), provider="google",
+        )
+    else:
+        mem.update_user(user.id, name=user.name or str(profile.get("name", "")),
+                        avatar_url=user.avatar_url or str(profile.get("picture", "")))
+    token = _start_session(mem, user, settings.cookie_secure)
+    response = RedirectResponse("/app", status_code=302)
+    _set_session_cookie(response, token, settings.cookie_secure)
+    response.delete_cookie(auth_mod.OAUTH_STATE_COOKIE, path="/")
+    return response
+
+
+@app.post("/api/turn/text", dependencies=[Depends(current_user)])
 def turn_text(body: TextTurn, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
     settings = _settings_for(body.lang)
     if not body.text.strip():
@@ -151,7 +323,7 @@ def turn_text(body: TextTurn, mem: Memory = Depends(mem_dep)) -> JSONResponse:  
     return JSONResponse(_turn_payload(result))
 
 
-@app.post("/api/turn/audio")
+@app.post("/api/turn/audio", dependencies=[Depends(current_user)])
 def turn_audio(
     file: UploadFile = File(...),
     lang: str = Form("hi-IN"),
@@ -239,7 +411,7 @@ def _write_wav(path: Path, pcm: bytes, rate: int) -> None:
         wav.writeframes(pcm)
 
 
-@app.get("/api/state")
+@app.get("/api/state", dependencies=[Depends(current_user)])
 def state(mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
     notes = [
         {"id": n.id, "text": n.text, "created_at": n.created_at, "source": n.source}
@@ -267,35 +439,35 @@ def state(mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
     })
 
 
-@app.delete("/api/notes/{note_id}")
+@app.delete("/api/notes/{note_id}", dependencies=[Depends(current_user)])
 def delete_note(note_id: int, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
     if not mem.forget_note(note_id):
         raise HTTPException(status_code=404, detail="no such note")
     return JSONResponse({"deleted": True})
 
 
-@app.delete("/api/reminders/{reminder_id}")
+@app.delete("/api/reminders/{reminder_id}", dependencies=[Depends(current_user)])
 def delete_reminder(reminder_id: int, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
     if not mem.delete_reminder(reminder_id):
         raise HTTPException(status_code=404, detail="no such reminder")
     return JSONResponse({"deleted": True})
 
 
-@app.delete("/api/work/{entry_id}")
+@app.delete("/api/work/{entry_id}", dependencies=[Depends(current_user)])
 def delete_work(entry_id: int, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
     if not mem.delete_work_entry(entry_id):
         raise HTTPException(status_code=404, detail="no such work entry")
     return JSONResponse({"deleted": True})
 
 
-@app.delete("/api/watch/{watched_id}")
+@app.delete("/api/watch/{watched_id}", dependencies=[Depends(current_user)])
 def delete_watch(watched_id: int, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
     if not mem.unwatch(watched_id):
         raise HTTPException(status_code=404, detail="no such watched item")
     return JSONResponse({"deleted": True})
 
 
-@app.get("/api/info")
+@app.get("/api/info", dependencies=[Depends(current_user)])
 def info() -> JSONResponse:
     from remo import lang as lang_mod
     from remo import __version__ as _version
@@ -310,13 +482,13 @@ def info() -> JSONResponse:
     })
 
 
-@app.get("/api/alarms")
+@app.get("/api/alarms", dependencies=[Depends(current_user)])
 def alarms() -> JSONResponse:
     due = reminders_mod.collect_due(get_db_path())
     return JSONResponse({"alarms": [{"id": r.id, "text": r.text} for r in due]})
 
 
-@app.post("/api/speak")
+@app.post("/api/speak", dependencies=[Depends(current_user)])
 def speak(body: Speak) -> JSONResponse:
     settings = _settings_for(body.lang)
     if not body.text.strip():
@@ -325,7 +497,7 @@ def speak(body: Speak) -> JSONResponse:
     return JSONResponse({"audio_url": _audio_url(audio)})
 
 
-@app.get("/api/audio/{name}")
+@app.get("/api/audio/{name}", dependencies=[Depends(current_user)])
 def audio(name: str) -> FileResponse:
     if not _AUDIO_NAME.match(name):
         raise HTTPException(status_code=404, detail="no such audio")
@@ -335,7 +507,42 @@ def audio(name: str) -> FileResponse:
     return FileResponse(path, media_type="audio/wav")
 
 
-@app.post("/api/demo/seed")
+class ImportKeep(BaseModel):
+    notes: list[str] = []
+    source: str = ""
+
+
+@app.post("/api/import/pdf", dependencies=[Depends(current_user)])
+def import_pdf(file: UploadFile = File(...)) -> JSONResponse:
+    """Gemini reads a PDF and proposes short notes; the user ticks what to keep."""
+    settings = load_settings()
+    name = (file.filename or "").strip() or "document.pdf"
+    raw = file.file.read()
+    if not name.lower().endswith(".pdf") or not raw.startswith(b"%PDF"):
+        raise HTTPException(status_code=400, detail="upload a real .pdf file")
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="PDF too large (10 MB max)")
+    if not settings.gemini_api_key:
+        raise HTTPException(status_code=503, detail="set GEMINI_API_KEY to import PDFs")
+    notes = llm_mod.extract_pdf_notes(raw, filename=name, settings=settings,
+                                      api_key=settings.gemini_api_key)
+    if not notes:
+        raise HTTPException(status_code=502, detail="could not read that PDF; try another")
+    return JSONResponse({"filename": name, "notes": notes})
+
+
+@app.post("/api/import/keep", dependencies=[Depends(current_user)])
+def import_keep(body: ImportKeep, mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
+    cleaned = [n.strip()[:500] for n in body.notes if n.strip()]
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="tick at least one note")
+    source = f"pdf:{(body.source or 'document.pdf').strip()}"[:40]
+    for note in cleaned[:20]:
+        mem.add_note(note, source=source)
+    return JSONResponse({"saved": min(len(cleaned), 20)})
+
+
+@app.post("/api/demo/seed", dependencies=[Depends(current_user)])
 def demo_seed(mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
     """Synthetic demo data for the video and first-time judges. Fake org, fake notes."""
     import time as _time

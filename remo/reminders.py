@@ -36,10 +36,14 @@ WEEKDAYS = {
 }
 
 FILLERS = {
-    "yaad", "dilana", "dila", "dena", "remind", "me", "reminder",
+    "yaad", "dilana", "dila", "remind", "me", "reminder",
     "mujhe", "ko", "ki", "ke", "ka", "please", "zara", "ek", "baje",
     "tu", "tum", "aap",
 }
+
+# Bare "dena" is task content ("utha dena" = wake me up); only the reminder
+# construction "dila dena" is filler.
+_DILA_DENA = re.compile(r"\bdila\s+dena\b", re.IGNORECASE)
 
 _RELATIVE = re.compile(
     r"(\d+)\s*(seconds?|minutes?|mins?|ghante?|ghanta|hours?|hrs?|din|dino|hafte|hafto)\s*baad", re.I
@@ -229,6 +233,7 @@ def split_task_time(text: str, now: datetime | None = None) -> tuple[str, dateti
     kept = "".join(
         ch for i, ch in enumerate(text) if not any(s <= i < e for s, e in spans)
     )
+    kept = _DILA_DENA.sub(" ", kept)
     words = [w for w in re.split(r"\s+", kept.strip()) if w.lower().strip(".,!?;:") not in FILLERS]
     task = re.sub(r"\s+", " ", " ".join(words)).strip(" .,!?;:")
     return task, moment

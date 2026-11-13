@@ -114,6 +114,7 @@ def test_llm_answer_used_when_available(mem: Memory, monkeypatch: pytest.MonkeyP
     from remo import turn as turn_mod
 
     _run("yaad rakhna kal kirana se atta lena hai", mem)
+    monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: None)
     monkeypatch.setattr(llm_mod, "compose", lambda *a, **k: "Kal atta lena hai, kirana se.")
     settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
     result = turn_mod.handle_text("kirana se kya lena hai?", mem=mem, settings=settings, speak=False)
@@ -126,11 +127,151 @@ def test_llm_failure_falls_back_to_extractive(mem: Memory, monkeypatch: pytest.M
     from remo import turn as turn_mod
 
     _run("yaad rakhna kal kirana se atta lena hai", mem)
+    monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: None)
     monkeypatch.setattr(llm_mod, "compose", lambda *a, **k: None)
     settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
     result = turn_mod.handle_text("kirana se kya lena hai?", mem=mem, settings=settings, speak=False)
     assert result.action == "recall"
     assert "Aapne kaha tha" in result.text
+
+
+def test_llm_first_understands_everything(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from remo import llm as llm_mod
+    from remo import turn as turn_mod
+
+    monkeypatch.setattr(
+        llm_mod, "try_intent", lambda *a, **k: {"intent": "save", "save_text": "ye sab karna"}
+    )
+    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    result = turn_mod.handle_text("remember, ye sab karna", mem=mem, settings=settings, speak=False)
+    assert result.action == "saved"
+    assert "yaad rakh lunga" in result.text
+    assert "ye sab karna" in mem.list_recent(1)[0].text
+
+
+def test_llm_other_speaks_guarded_reply(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from remo import llm as llm_mod
+    from remo import turn as turn_mod
+
+    monkeypatch.setattr(
+        llm_mod, "try_intent", lambda *a, **k: {"intent": "other", "reply": "Namaste! Kaise ho?"}
+    )
+    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    result = turn_mod.handle_text("namaste", mem=mem, settings=settings, speak=False)
+    assert result.action == "chat"
+    assert result.text == "Namaste! Kaise ho?"
+
+
+def test_llm_intent_none_uses_patterns(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from remo import llm as llm_mod
+    from remo import turn as turn_mod
+
+    monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: None)
+    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    result = turn_mod.handle_text("yaad rakhna chai pini hai", mem=mem, settings=settings, speak=False)
+    assert result.action == "saved"
+    assert "Yaad kar liya" in result.text
+
+
+def test_llm_forget_remind_quiz_briefing_dispatch(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from remo import llm as llm_mod
+    from remo import turn as turn_mod
+
+    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    _run("yaad rakhna maths mein integration ho gaya", mem)
+
+    monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: {"intent": "forget", "target": "maths"})
+    assert turn_mod.handle_text("ise hata do", mem=mem, settings=settings, speak=False).action == "forget_ask"
+
+    monkeypatch.setattr(
+        llm_mod, "try_intent",
+        lambda *a, **k: {"intent": "remind", "remind_task": "chai dekhna", "remind_when": "5 minute baad"},
+    )
+    assert turn_mod.handle_text("chai ka dhyan rakhna", mem=mem, settings=settings, speak=False).action == "remind_confirm"
+
+    monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: {"intent": "quiz", "quiz_topic": "maths"})
+    assert turn_mod.handle_text("quiz time", mem=mem, settings=settings, speak=False).action == "quiz_ask"
+
+    monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: {"intent": "briefing"})
+    assert turn_mod.handle_text("briefing chahiye", mem=mem, settings=settings, speak=False).action == "plan"
+
+
+def test_devanagari_task_question_lists_pending(mem: Memory) -> None:
+    _run("yaad rakhna maths mein integration ho gaya, differential baaki hai", mem)
+    result = _run("क्या टास्क बचे हैं", mem)
+    assert result.action == "left_off"
+    assert "differential" in result.text
+
+
+def test_devanagari_welcome_and_quiz_route(mem: Memory) -> None:
+    _run("yaad rakhna maths mein integration ho gaya", mem)
+    assert _run("वेलकम बैक", mem).action == "welcome"
+    assert _run("क्विज़ करो", mem).action == "quiz_ask"
+
+
+def test_devanagari_remind_routes_to_time_question(mem: Memory) -> None:
+    result = _run("कल चाय याद दिलाना", mem)
+    assert "Kab yaad dilaun" in result.text
+
+
+def test_wake_up_phrasing_arms_reminder(mem: Memory) -> None:
+    result = _run("mujhe kal subah 9 baje utha dena", mem)
+    assert result.action == "remind_confirm"
+    assert "9" in result.text and "utha dena" in result.text
+
+
+def test_watchlist_without_link_asks_for_it(mem: Memory) -> None:
+    result = _run("koi naya repository watchlist mein daalo", mem)
+    assert "link bolo" in result.text or "link" in result.text.lower()
+
+
+def test_obligation_verbs_count_as_pending() -> None:
+    from remo import recall as R
+
+    assert R._PENDING_PAT.search("kal kirana se atta lena hai")
+    assert R._PENDING_PAT.search("mujhe kal ghar ki safai karni hai")
+    assert R._PENDING_PAT.search("demo video banana hai")
+    assert R._PENDING_PAT.search("मुझे कल घर की सफाई करनी है।")
+    assert not R._PENDING_PAT.search("khana taiyaar hai")
+    assert not R._PENDING_PAT.search("yeh gaana hai")
+
+
+def test_add_task_saves_note_and_pending_entry(mem: Memory) -> None:
+    result = _run("add task buy milk tomorrow", mem)
+    assert result.action == "task_added"
+    assert "Task jod diya" in result.text
+    assert "buy milk" in mem.list_recent(1)[0].text
+    entry = mem.find_work_entry("", "")
+    assert entry is not None and any("buy milk" in p for p in entry.pending)
+
+
+def test_add_task_devanagari_and_empty(mem: Memory) -> None:
+    result = _run("टास्क जोड़ो दूध लाना", mem)
+    assert result.action == "task_added"
+    assert mem.find_work_entry("", "") is not None
+    assert "Kaun sa task" in _run("add task", mem).text
+
+
+def test_llm_add_task_dispatch(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from remo import llm as llm_mod
+    from remo import turn as turn_mod
+
+    monkeypatch.setattr(
+        llm_mod, "try_intent", lambda *a, **k: {"intent": "add_task", "task_text": "call mummy"}
+    )
+    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    result = turn_mod.handle_text("mummy ko call karna hai, yaad rakhna", mem=mem, settings=settings, speak=False)
+    assert result.action == "task_added"
+    assert mem.find_work_entry("", "") is not None
+
+
+def test_left_off_unions_work_pending_without_dupes(mem: Memory) -> None:
+    _run("yaad rakhna server deploy karna baaki hai", mem)
+    mem.upsert_work_entry("student", "", "", [], ["server deploy karna baaki hai", "docs likhna hai"])
+    result = _run("kya task bache hain?", mem)
+    assert result.action == "left_off"
+    assert "docs likhna hai" in result.text
+    assert result.text.count("server deploy karna baaki hai") == 1
 
 
 def test_recall_answers_each_question_from_its_own_note(mem: Memory) -> None:

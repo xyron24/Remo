@@ -87,7 +87,7 @@
   }
 
   /* ---------- router ---------- */
-  const PAGES = ["home", "ask", "memories", "work", "reminders", "watchlist", "briefing", "voice", "settings"];
+  const PAGES = ["home", "ask", "memories", "work", "reminders", "watchlist", "briefing", "voice", "settings", "profile"];
   function activePage() {
     const raw = location.hash.replace("#/", "").split("?")[0] || "home";
     return PAGES.includes(raw) ? raw : "home";
@@ -173,6 +173,9 @@
   const ACTION_LABELS = {
     saved: "saved",
     recall: "recall",
+    chat: "chat",
+    task_added: "task",
+    task_ask: "confirm",
     briefing: "briefing",
     plan: "day plan",
     remind_ask: "confirm",
@@ -392,10 +395,47 @@
       const s = await API.state();
       store.cache = s;
       renderAll(s);
-      $("conn").innerHTML = `<span class="dot ready"></span><span>Connected</span>`;
+      $("conn").className = "conn-dot ready";
+      $("conn").title = "Connected";
     } catch {
-      $("conn").innerHTML = `<span class="dot bad"></span><span>Server away</span>`;
+      $("conn").className = "conn-dot bad";
+      $("conn").title = "Server away";
     }
+  }
+
+  function avatarHTML(me, fallback) {
+    if (me && me.avatar_url) return `<img src="${esc(me.avatar_url)}" alt="">`;
+    return esc(fallback);
+  }
+
+  function setText(id, value) {
+    const el = $(id);
+    if (el) el.textContent = value;
+  }
+
+  function setHTML(id, value) {
+    const el = $(id);
+    if (el) el.innerHTML = value;
+  }
+
+  function renderMe() {
+    const me = store.me || {};
+    const initial = (me.name || me.email || "?").trim().charAt(0).toUpperCase() || "?";
+    setHTML("chip-avatar", avatarHTML(me, initial));
+    setText("chip-name", me.name || me.email || "…");
+    setHTML("prof-avatar", avatarHTML(me, initial));
+    setText("prof-name", me.name || "…");
+    setText("prof-email", me.email || "");
+    setText("prof-provider", me.provider === "google" ? "Google" : "Email");
+    setText("prof-since", me.created_at
+      ? `member since ${new Date(me.created_at * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
+      : "");
+  }
+
+  function renderProfileStats(s) {
+    const el = $("prof-stats");
+    if (!el || !s) return;
+    el.textContent = `${s.notes.length} memories · ${pendingCount(s)} pending · ${s.reminders.length} alarms · ${s.watched.length} watched`;
   }
 
   function pendingCount(s) {
@@ -419,9 +459,6 @@
     badge("badge-rem", s.reminders.length);
     badge("badge-watch", s.changes.filter((c) => !c.briefed).length);
 
-    const homeSeed = $("home-seed");
-    if (homeSeed) homeSeed.hidden = s.notes.length > 0 || s.work.length > 0;
-
     const act = $("activity");
     act.innerHTML = "";
     const items = [
@@ -442,6 +479,7 @@
     renderWatch(s);
     renderContext(s);
     renderLearned(s);
+    renderProfileStats(s);
   }
 
   async function removeItem(kind, id, label) {
@@ -677,7 +715,18 @@
     return submitText("welcome back", $("thread-home"));
   }
 
-  function init() {
+  async function init() {
+    try {
+      store.me = (await API.me()).user;
+    } catch (err) {
+      if (err && err.message === "signed out") return; // req() redirected to /login
+      // Anything else (e.g. talking to an older server): run degraded, profile blank.
+    }
+    try {
+      renderMe();
+    } catch {
+      /* mismatched markup must never kill the app */
+    }
     greeting();
     applyTheme(store.theme);
     applyLang(store.lang === "mr-IN" ? "mr-IN" : "hi-IN");
@@ -761,7 +810,17 @@
       catch (err) { toast(`Seed failed: ${err.message}`, true); }
     };
     $("seed").onclick = doSeed;
-    if ($("home-seed")) $("home-seed").onclick = doSeed;
+    if ($("logout-btn")) $("logout-btn").onclick = async () => {
+      try { await API.logout(); } catch { /* cookie cleared anyway */ }
+      window.location.href = "/login";
+    };
+    wirePdfImport();
+    if (!window.__remoErrWired) {
+      window.__remoErrWired = true;
+      window.addEventListener("error", () => {
+        toast("The app hit an error. Hard-refresh (Cmd+Shift+R) to reload it cleanly.", true);
+      }, { once: true });
+    }
 
     if ($("try-chips")) {
       $("try-chips").addEventListener("click", (e) => {
@@ -811,11 +870,74 @@
       toast("Phrase loaded — press Enter to run");
     }
 
+    wireOverviewLink();
+
     skeleton($("activity"));
     refresh();
     loadInfo();
     setInterval(refresh, 10000);
     setInterval(pollAlarms, 5000);
+  }
+
+  let importSource = "";
+  function wirePdfImport() {
+    const btn = $("import-pdf-btn"), file = $("import-pdf-file");
+    if (!btn || !file || btn.dataset.wired) return;
+    btn.dataset.wired = "1";
+    btn.onclick = () => file.click();
+    file.onchange = async () => {
+      if (!file.files.length) return;
+      btn.disabled = true;
+      toast("Reading PDF, this takes a few seconds…");
+      try {
+        const data = await API.importPdf(file.files[0]);
+        importSource = data.filename || file.files[0].name;
+        renderImportPick(data.notes || []);
+      } catch (err) {
+        toast(err.message, true);
+      } finally {
+        btn.disabled = false;
+        file.value = "";
+      }
+    };
+    $("import-cancel-btn").onclick = () => { $("import-pick").hidden = true; };
+    $("import-keep-btn").onclick = async () => {
+      const picked = [...document.querySelectorAll("#import-list input:checked")]
+        .map((box) => box.value);
+      if (!picked.length) { toast("Tick at least one note", true); return; }
+      try {
+        const done = await API.keepNotes(picked, importSource);
+        toast(`Saved ${done.saved} notes from PDF`);
+        $("import-pick").hidden = true;
+        refresh();
+      } catch (err) {
+        toast(err.message, true);
+      }
+    };
+  }
+
+  function renderImportPick(notes) {
+    const box = $("import-pick"), list = $("import-list");
+    list.innerHTML = "";
+    if (!notes.length) { toast("No notes found in that PDF", true); return; }
+    notes.forEach((text, i) => {
+      const li = document.createElement("li");
+      const id = `imp-${i}`;
+      li.innerHTML = `<label class="check" for="${id}"><input id="${id}" type="checkbox" checked value="${esc(text)}"><span>${esc(text)}</span></label>`;
+      list.appendChild(li);
+    });
+    box.hidden = false;
+  }
+
+  function wireOverviewLink() {
+    const link = $("nav-overview");
+    if (!link || link.dataset.wired) return;
+    link.dataset.wired = "1";
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      document.querySelector(".shell").classList.add("leaving");
+      setTimeout(() => { window.location.href = "/"; }, 170);
+    });
   }
 
   document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", init) : init();

@@ -30,14 +30,46 @@ from remo import worklog as worklog_mod
 
 log = get_logger("turn")
 
-_REMIND_MARKERS = ("yaad dilana", "yaad dila", "remind me", "reminder lagao", "reminder", "aathvan")
+_REMIND_MARKERS = ("yaad dilana", "yaad dila", "remind me", "reminder lagao", "reminder", "aathvan",
+                   "utha dena", "utha do", "jaga dena", "jaga do", "alarm lagao", "alarm laga do")
 
-_WATCH_MARKERS = ("watch karo", "track karo", "nazar rakho", "watch this", "laksh thev")
+_WATCH_MARKERS = ("watch karo", "track karo", "nazar rakho", "watch this", "laksh thev", "watchlist")
 
 _UPDATE_MARKERS = ("koi update", "update aaya", "update aaye", "check update", "naya kya hai", "what changed",
                    "what's new", "koi badlaav", "kahi update", "kay badal")
 
 _WELCOME_MARKERS = ("welcome back", "vapas aaya", "wapas aaya", "wapis aaya", "vapas aa gaya", "main vapas")
+
+_DEVA_MARKERS = {
+    "remind": ("रिमाइंड",),
+    "watch": ("वॉच", "ट्रैक", "नजर", "लक्ष", "वॉचलिस्ट"),
+    "update": ("अपडेट",),
+    "welcome": ("वेलकम",),
+}
+
+_WORD_MARKERS = {
+    # Singles that mean the intent alone ("reminder" -> ask when/what).
+    # Bare verbs like "dilana"/"track" stay out: "paise dilana" is not a reminder.
+    "remind": frozenset({"reminder"}),
+    "watch": frozenset({"watch"}),
+    "update": frozenset({"update"}),
+    "welcome": frozenset({"welcome"}),
+}
+
+
+def _marker_hit(text: str, phrases: tuple[str, ...], kind: str) -> bool:
+    """Intent phrases in either script: raw, folded-both-sides, token, Devanagari."""
+    from remo.memory import content_tokens, fold_text
+
+    norm = kw.normalize(text)
+    if any(marker in norm for marker in phrases):
+        return True
+    if any(marker in norm for marker in _DEVA_MARKERS[kind]):
+        return True
+    folded = fold_text(text)
+    if any(fold_text(marker) in folded for marker in phrases):
+        return True
+    return not set(content_tokens(text)).isdisjoint(_WORD_MARKERS[kind])
 
 
 @dataclass
@@ -67,24 +99,151 @@ def _speak(
 
 
 def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, speak: bool = True) -> TurnResult:
-    """Run one transcript through save/recall/forget routing + voice-out."""
+    """The LLM understands every turn; patterns cover URLs and no-key fallback."""
     settings = settings or load_settings()
     s = lang_mod.strings(settings.language)
 
+    if settings.gemini_api_key:
+        decided = _llm_turn(text, mem=mem, settings=settings, speak=speak, s=s)
+        if decided is not None:
+            return decided
+    return _pattern_turn(text, mem=mem, settings=settings, speak=speak, s=s)
+
+
+def _llm_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: dict) -> TurnResult | None:
+    """Understand anything via the LLM; None means fall through to patterns."""
+    # URL extraction stays exact: regex never mangles links the way a model might.
+    if _marker_hit(text, _WATCH_MARKERS, "watch"):
+        return _watch_turn(text, mem=mem, settings=settings, speak=speak, s=s)
+    if _marker_hit(text, _UPDATE_MARKERS, "update"):
+        return check_updates(mem=mem, settings=settings, speak=speak)
+    if _marker_hit(text, _WELCOME_MARKERS, "welcome"):
+        return _welcome_turn(mem=mem, settings=settings, speak=speak, s=s)
+    parsed = llm_mod.try_intent(text, settings)
+    if not parsed:
+        return None
+    kind = parsed.get("intent", "other")
+
+    if kind == "save":
+        content = (parsed.get("save_text") or "").strip()
+        if not content or kw.check_content(content):
+            return None
+        return _save_content(content, mem, settings, speak, s, warm=True)
+
+    if kind == "recall":
+        query = (parsed.get("query") or "").strip() or text
+        result = _recall_turn(query, mem=mem, settings=settings, speak=speak, s=s)
+        return result if result.action != "help" else None
+
+    if kind == "forget":
+        target = (parsed.get("target") or "").strip()
+        if target.lower() in ("last", "last one", "aakhri", "आखिरी"):
+            return _speak(s["confirm_undo"], "undo_ask", settings, speak, pending={"action": "undo"})
+        hits = recall_mod.hybrid_search(mem, target or text, limit=3)
+        if not hits:
+            return _speak(s["nothing_named"], "recall", settings, speak)
+        return _speak(
+            s["forget_ask"].format(text=hits[0].text),
+            "forget_ask",
+            settings,
+            speak,
+            pending={"action": "forget", "note_id": hits[0].id},
+        )
+
+    if kind == "remind":
+        combined = f"{parsed.get('remind_task', '')} {parsed.get('remind_when', '')}".strip()
+        return _remind_turn(combined or text, mem=mem, settings=settings, speak=speak, s=s)
+
+    if kind == "quiz":
+        topic = (parsed.get("quiz_topic") or "").strip() or None
+        session, say = quiz_mod.start_quiz(mem, topic=topic)
+        pending = {"action": "quiz", "session": session.to_dict()} if session else None
+        return _speak(say, "quiz_ask", settings, speak, pending=pending)
+
+    if kind == "briefing":
+        return _speak(briefing_mod.compose_plan(mem, s=s), "plan", settings, speak)
+
+    if kind == "add_task":
+        task = (parsed.get("task_text") or "").strip()
+        if not task:
+            return _speak(s["task_ask"], "task_ask", settings, speak)
+        return _add_task(task, mem=mem, settings=settings, speak=speak, s=s)
+
+    reply = (parsed.get("reply") or "").strip()
+    if not reply:
+        return None
+    return _speak(reply[:600], "chat", settings, speak)
+
+
+def _save_content(content: str, mem: Memory, settings: Settings, speak: bool, s: dict,
+                  warm: bool = False) -> TurnResult:
+    mem.add_note(content)
+    if worklog_mod.is_work_update(content):
+        worklog_mod.store_update(mem, content)
+    armed_span = _maybe_auto_remind(mem, content)
+    if armed_span:
+        return _speak(s["auto_remind"].format(span=armed_span), "saved", settings, speak)
+    if worklog_mod.is_work_update(content):
+        return _speak(s["ack_saved_work"], "saved", settings, speak)
+    ack = s["ack_saved_warm"] if warm else s["ack_saved"]
+    return _speak(ack, "saved", settings, speak)
+
+
+def _add_task(task: str, *, mem: Memory, settings: Settings, speak: bool, s: dict) -> TurnResult:
+    """A task is a note plus a pending item on the general work entry."""
+    mem.add_note(task[:500])
+    mem.upsert_work_entry(worklog_mod.detect_persona(task), "", "", [], [task[:200]])
+    return _speak(s["task_added"].format(task=task[:120]), "task_added", settings, speak)
+
+
+def _welcome_turn(mem: Memory, settings: Settings, speak: bool, s: dict) -> TurnResult:
+    entries = mem.list_work_entries(limit=10)
+    deltas = mem.unbriefed_changes()
+    links = [c.source_link for _, changes in deltas for c in changes if c.source_link]
+    say = llm_mod.try_briefing(entries, deltas, settings)
+    if say is None:
+        say, _ = worklog_mod.compose_welcome_back(entries, deltas, s=s)
+    _mark_deltas_briefed(mem, deltas)
+    return _speak(say, "welcome", settings, speak, links=links)
+
+
+def _recall_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: dict) -> TurnResult:
+    """Day plan, left-off, or general recall over one question."""
+    day_plan = briefing_mod.wants_day_plan(text)
+    if day_plan is not None:
+        return _speak(briefing_mod.compose_day_plan(mem, day_plan, s=s), "plan", settings, speak)
+
+    if recall_mod.is_left_off_query(text):
+        org, ref = worklog_mod.detect_refs(text)
+        if org or ref:
+            entry = mem.find_work_entry(org, ref)
+            if entry is None:
+                return _speak(s["no_work_record"], "left_off", settings, speak)
+            return _speak(worklog_mod.compose_entry(entry, s=s), "left_off", settings, speak)
+        extra = [p for e in mem.list_work_entries(limit=10) for p in e.pending[:3]]
+        say = recall_mod.compose_left_off(mem.list_recent(20), s=s, extra=extra)
+        return _speak(say, "left_off", settings, speak)
+
+    hits = recall_mod.hybrid_search(mem, text, limit=3)
+    if recall_mod.is_recall_query(text) or hits:
+        if not hits and recall_mod.is_tell_all_query(text):
+            recent = mem.list_recent(3)
+            return _speak(recall_mod.compose_recall(recent, s=s), "recall", settings, speak)
+        say = llm_mod.try_compose(text, hits, mem, settings) if hits else None
+        if say is None:
+            say = recall_mod.compose_answer(hits, mem, s=s)
+        return _speak(say, "recall", settings, speak)
+    return _speak(s["help"], "help", settings, speak)
+
+
+def _pattern_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: dict) -> TurnResult:
+    """Fast offline routing; also the fallback when the LLM is off or unsure."""
     content = kw.match_save_keyword(text)
     if content is not None:
         reason = kw.check_content(content)
         if reason:
             return _speak(s["prompt_repeat"], "repeat", settings, speak)
-        mem.add_note(content)
-        if worklog_mod.is_work_update(content):
-            worklog_mod.store_update(mem, content)
-        armed_span = _maybe_auto_remind(mem, content)
-        if armed_span:
-            return _speak(s["auto_remind"].format(span=armed_span), "saved", settings, speak)
-        if worklog_mod.is_work_update(content):
-            return _speak(s["ack_saved_work"], "saved", settings, speak)
-        return _speak(s["ack_saved"], "saved", settings, speak)
+        return _save_content(content, mem, settings, speak, s)
 
     if kw.is_undo_last(text):
         return _speak(s["confirm_undo"], "undo_ask", settings, speak, pending={"action": "undo"})
@@ -102,6 +261,12 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
             pending={"action": "forget", "note_id": hits[0].id},
         )
 
+    task = kw.match_task(text)
+    if task is not None:
+        if not task.strip():
+            return _speak(s["task_ask"], "task_ask", settings, speak)
+        return _add_task(task.strip(), mem=mem, settings=settings, speak=speak, s=s)
+
     if _is_remind_request(text):
         return _remind_turn(text, mem=mem, settings=settings, speak=speak, s=s)
 
@@ -117,48 +282,20 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
         pending = {"action": "quiz", "session": session.to_dict()} if session else None
         return _speak(say, "quiz_ask", settings, speak, pending=pending)
 
-    norm = kw.normalize(text)
-    if any(marker in norm for marker in _WATCH_MARKERS):
+    if _marker_hit(text, _WATCH_MARKERS, "watch"):
         return _watch_turn(text, mem=mem, settings=settings, speak=speak, s=s)
 
-    if any(marker in norm for marker in _UPDATE_MARKERS):
+    if _marker_hit(text, _UPDATE_MARKERS, "update"):
         return check_updates(mem=mem, settings=settings, speak=speak)
 
-    if any(marker in norm for marker in _WELCOME_MARKERS):
-        deltas = mem.unbriefed_changes()
-        say, links = worklog_mod.compose_welcome_back(mem.list_work_entries(limit=10), deltas, s=s)
-        _mark_deltas_briefed(mem, deltas)
-        return _speak(say, "welcome", settings, speak, links=links)
+    if _marker_hit(text, _WELCOME_MARKERS, "welcome"):
+        return _welcome_turn(mem=mem, settings=settings, speak=speak, s=s)
 
-    day_plan = briefing_mod.wants_day_plan(text)
-    if day_plan is not None:
-        return _speak(briefing_mod.compose_day_plan(mem, day_plan, s=s), "plan", settings, speak)
-
-    if recall_mod.is_left_off_query(text):
-        org, ref = worklog_mod.detect_refs(text)
-        if org or ref:
-            entry = mem.find_work_entry(org, ref)
-            if entry is None:
-                return _speak(s["no_work_record"], "left_off", settings, speak)
-            return _speak(worklog_mod.compose_entry(entry, s=s), "left_off", settings, speak)
-        say = recall_mod.compose_left_off(mem.list_recent(20), s=s)
-        return _speak(say, "left_off", settings, speak)
-
-    hits = recall_mod.hybrid_search(mem, text, limit=3)
-    if recall_mod.is_recall_query(text) or hits:
-        if not hits and recall_mod.is_tell_all_query(text):
-            recent = mem.list_recent(3)
-            return _speak(recall_mod.compose_recall(recent, s=s), "recall", settings, speak)
-        say = llm_mod.try_compose(text, hits, mem, settings) if hits else None
-        if say is None:
-            say = recall_mod.compose_answer(hits, mem, s=s)
-        return _speak(say, "recall", settings, speak)
-    return _speak(s["help"], "help", settings, speak)
+    return _recall_turn(text, mem=mem, settings=settings, speak=speak, s=s)
 
 
 def _is_remind_request(text: str) -> bool:
-    norm = kw.normalize(text)
-    return any(marker in norm for marker in _REMIND_MARKERS)
+    return _marker_hit(text, _REMIND_MARKERS, "remind")
 
 
 def _maybe_auto_remind(mem: Memory, content: str) -> str:

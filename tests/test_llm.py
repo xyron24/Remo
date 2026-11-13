@@ -70,8 +70,113 @@ def test_compose_truncates_long_output(monkeypatch: pytest.MonkeyPatch) -> None:
     assert out is not None and len(out) <= L.MAX_CHARS
 
 
+def test_quota_moves_to_next_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    import requests
+
+    calls: list[str] = []
+
+    def flaky(url: str, json: dict | None = None, timeout: float = 0):
+        calls.append(url)
+        if "2.5-flash" in url:
+            response = requests.Response()
+            response.status_code = 429
+            raise requests.HTTPError("quota", response=response)
+        return _ok_response("second model answers.")
+
+    monkeypatch.setattr("remo.llm.requests.post", flaky)
+    out = L.compose("q?", ["note"], api_key="g-test")
+    assert out == "second model answers."
+    assert len(calls) == 2 and "3-flash" in calls[1]
+
+
+def test_auth_error_does_not_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    import requests
+
+    calls: list[str] = []
+
+    def denied(url: str, json: dict | None = None, timeout: float = 0):
+        calls.append(url)
+        response = requests.Response()
+        response.status_code = 403
+        raise requests.HTTPError("denied", response=response)
+
+    monkeypatch.setattr("remo.llm.requests.post", denied)
+    assert L.compose("q?", ["note"], api_key="bad") is None
+    assert len(calls) == 1
+
+
+def test_extract_pdf_notes_parses_lines(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict = {}
+
+    def fake_post(url: str, json: dict | None = None, timeout: float = 0):
+        seen["body"] = json
+        return _ok_response("1. Integration is area under a curve\n- Differential is slope\n\nPhotosynthesis needs sun.")
+
+    monkeypatch.setattr("remo.llm.requests.post", fake_post)
+    notes = L.extract_pdf_notes(b"%PDF-fake", filename="maths.pdf", api_key="g-test")
+    assert notes == ["Integration is area under a curve", "Differential is slope", "Photosynthesis needs sun."]
+    parts = seen["body"]["contents"][0]["parts"]
+    assert parts[0]["inline_data"]["mime_type"] == "application/pdf"
+
+
+def test_extract_pdf_notes_caps_and_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("remo.llm.requests.post", lambda *a, **k: _ok_response("\n".join(f"n{i}" for i in range(30))))
+    notes = L.extract_pdf_notes(b"%PDF-fake", api_key="g-test")
+    assert notes is not None and len(notes) == 12
+    assert L.extract_pdf_notes(b"", api_key="g-test") is None
+    assert L.extract_pdf_notes(b"%PDF-fake", api_key="") is None
+
+    def boom(*args, **kwargs):
+        raise TimeoutError("slow")
+
+    monkeypatch.setattr("remo.llm.requests.post", boom)
+    assert L.extract_pdf_notes(b"%PDF-fake", api_key="g-test") is None
+
+
+def test_compose_briefing_lists_work_then_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict = {}
+
+    def fake_post(url: str, json: dict | None = None, timeout: float = 0):
+        seen["body"] = json
+        return _ok_response("Docs baaki hai, aur ek naya comment aaya.")
+
+    monkeypatch.setattr("remo.llm.requests.post", fake_post)
+    out = L.compose_briefing(["docs baaki hai"], ["Naya comment aaya."], api_key="g-test")
+    assert out == "Docs baaki hai, aur ek naya comment aaya."
+    blob = str(seen["body"])
+    assert "docs baaki hai" in blob and "Naya comment" in blob
+    assert L.compose_briefing([], [], api_key="g-test") is None
+
+
 def test_try_compose_dead_end_without_key(tmp_path: Path) -> None:
     mem = Memory(tmp_path / "remo.db")
     note = mem.add_note("kal kirana se atta lena hai")
     assert L.try_compose("kal kya lena hai?", [note], mem, Settings()) is None
     mem.close()
+
+
+def test_parse_intent_reads_slots(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "remo.llm.requests.post",
+        lambda *a, **k: _ok_response('{"intent": "save", "save_text": "ye sab karna"}'),
+    )
+    parsed = L.parse_intent("remember, ye sab karna", api_key="g-test")
+    assert parsed == {"intent": "save", "save_text": "ye sab karna"}
+
+
+def test_parse_intent_tolerates_fences_and_rejects_garbage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "remo.llm.requests.post",
+        lambda *a, **k: _ok_response('```json\n{"intent": "other", "reply": "Namaste!"}\n```'),
+    )
+    assert L.parse_intent("namaste", api_key="g-test") == {"intent": "other", "reply": "Namaste!"}
+    monkeypatch.setattr("remo.llm.requests.post", lambda *a, **k: _ok_response("not json"))
+    assert L.parse_intent("namaste", api_key="g-test") is None
+    monkeypatch.setattr(
+        "remo.llm.requests.post", lambda *a, **k: _ok_response('{"intent": "teleport"}')
+    )
+    assert L.parse_intent("namaste", api_key="g-test") is None
+    assert L.parse_intent("namaste", api_key="") is None
+    assert L.try_intent("namaste", Settings()) is None

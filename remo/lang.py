@@ -8,6 +8,7 @@ from __future__ import annotations
 
 HI = {
     "ack_saved": "Yaad kar liya.",
+    "ack_saved_warm": "Theek hai, yaad rakh lunga.",
     "ack_saved_work": "Yaad kar liya, kaam ki list mein jod diya.",
     "prompt_repeat": "Uske baad kya yaad rakhna hai, ek baar phir bolo?",
     "confirm_undo": "Aakhri wali baat bhula doon?",
@@ -15,6 +16,8 @@ HI = {
     "kept": "Rehne diya, yaad rahega.",
     "help": "Kuch yaad karwane ke liye 'yaad rakhna' se shuru karo. Puchhne ke liye bas bol do, jaise 'kya bacha hai?'",
     "nothing_named": "Is naam se kuch yaad nahi hai.",
+    "task_added": "Task jod diya: {task}.",
+    "task_ask": "Kaun sa task jodun?",
     "ask_when": "Kab yaad dilaun? Waqt samajh nahi aaya.",
     "ask_task": "Kis liye yaad dilaun?",
     "ask_yes_no": "Haan ya nahi?",
@@ -73,6 +76,7 @@ HI = {
 
 MR = {
     "ack_saved": "Lakshat thevla.",
+    "ack_saved_warm": "Theek aahe, lakshat thevin.",
     "ack_saved_work": "Lakshat thevla, kamachya yadit jodla.",
     "prompt_repeat": "Tyanantar kay lakshat thevaycha aahe, ekda parat bola?",
     "confirm_undo": "Shevatchi goshta visru ka?",
@@ -80,6 +84,8 @@ MR = {
     "kept": "Rahu dila, lakshat rahil.",
     "help": "Kahi lakshat thevaycha asel tar 'lakshat thev' ne suruvat kara. Vicharaycha asel tar fakt bola, jasa 'kay rahila aahe?'",
     "nothing_named": "Ya navane kahi aathavat nahi.",
+    "task_added": "Task jodla: {task}.",
+    "task_ask": "Kont task jodu?",
     "ask_when": "Kevha aathvan karun? Vel samajli nahi.",
     "ask_task": "Kashasathi aathvan karun?",
     "ask_yes_no": "Hoy ki nahi?",

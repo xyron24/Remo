@@ -20,6 +20,12 @@ _FORGET_PREFIXES = (
     "visar", "visrun", "विसर", "विसरून",
 )
 
+# ऐड/एड/एंड are how STT spells spoken "add"; "and task" is the Latin twin.
+_TASK_PREFIXES = (
+    "add task", "add a task", "add tasks", "and task", "task add karo", "task jod do",
+    "टास्क जोड़ो", "टास्क जोड़ दो", "टास्क जोड", "ऐड टास्क", "एड टास्क", "एंड टास्क",
+)
+
 _UNDO_LAST = frozenset(
     {
         "bhool jao last wali baat",
@@ -74,6 +80,18 @@ def check_content(content: str) -> str | None:
 def is_undo_last(text: str) -> bool:
     """True for exact 'forget the last thing I said' utterances."""
     return normalize(text) in _UNDO_LAST
+
+
+def match_task(text: str) -> str | None:
+    """Task text after an utterance-initial add-task trigger, else None."""
+    tidy = _tidy(text)
+    lowered = tidy.lower()
+    for prefix in _TASK_PREFIXES:
+        if lowered == prefix:
+            return ""
+        if lowered.startswith(prefix) and lowered[len(prefix)] in _SEPARATORS + " ":
+            return tidy[len(prefix) :].lstrip(_SEPARATORS + " ")
+    return None
 
 
 def match_forget(text: str) -> str | None:

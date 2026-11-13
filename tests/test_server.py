@@ -31,7 +31,18 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     monkeypatch.setattr(server_mod, "synthesize", fake_synth)
     monkeypatch.setattr("remo.turn.synthesize", fake_synth)
-    return TestClient(server_mod.app)
+    logged_in = TestClient(server_mod.app)
+    registered = logged_in.post(
+        "/api/auth/register",
+        json={"name": "Test", "email": "test@example.com", "password": "password-1"},
+    )
+    assert registered.status_code == 200
+    logged = logged_in.post(
+        "/api/auth/login",
+        json={"email": "test@example.com", "password": "password-1"},
+    )
+    assert logged.status_code == 200
+    return logged_in
 
 
 def _wav16k(seconds: float = 0.5) -> bytes:
@@ -198,3 +209,102 @@ def test_due_alarm_fires_once(client: TestClient, tmp_path: Path) -> None:
 def test_audio_guard_blocks_traversal(client: TestClient) -> None:
     assert client.get("/api/audio/....wav").status_code == 404
     assert client.get("/api/audio/" + "a" * 40 + ".wav").status_code == 404
+
+
+def test_register_login_me_logout_roundtrip(client: TestClient) -> None:
+    client.cookies.clear()
+    assert client.post("/api/auth/register", json={"email": "bad", "password": "password-1"}).status_code == 400
+    assert client.post("/api/auth/register", json={"email": "n@x.co", "password": "short"}).status_code == 400
+    created = client.post(
+        "/api/auth/register", json={"name": "Asha", "email": "asha@x.co", "password": "password-1"}
+    ).json()
+    assert created["user"]["email"] == "asha@x.co"
+    assert client.get("/api/me").status_code == 401  # register saves, does not sign in
+    assert client.post(
+        "/api/auth/register", json={"email": "asha@x.co", "password": "password-1"}
+    ).status_code == 409
+    client.cookies.clear()
+    assert client.post("/api/auth/login", json={"email": "asha@x.co", "password": "nope-nope-nope"}).status_code == 401
+    assert client.get("/api/me").status_code == 401
+    logged = client.post("/api/auth/login", json={"email": "asha@x.co", "password": "password-1"}).json()
+    assert logged["user"]["name"] == "Asha"
+    assert client.get("/api/me").json()["user"]["email"] == "asha@x.co"
+    assert client.post("/api/logout").json() == {"ok": True}
+    assert client.get("/api/me").status_code == 401
+
+
+def test_app_and_api_require_sign_in(client: TestClient) -> None:
+    client.cookies.clear()
+    app = client.get("/app", follow_redirects=False)
+    assert app.status_code == 302 and app.headers["location"] == "/login"
+    assert client.get("/api/state").status_code == 401
+    assert client.post("/api/turn/text", json={"text": "hi"}).status_code == 401
+    assert client.get("/login").status_code == 200
+    assert client.get("/").status_code == 200  # landing stays public
+
+
+def test_login_redirects_when_signed_in(client: TestClient) -> None:
+    response = client.get("/login", follow_redirects=False)
+    assert response.status_code == 302 and response.headers["location"] == "/app"
+
+
+def test_google_start_needs_config(client: TestClient) -> None:
+    response = client.get("/api/auth/google/start", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login?error=not_configured"
+    assert client.get("/api/auth/providers").json() == {"google": False}
+
+
+def test_google_callback_happy_path(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "sec")
+    assert client.get("/api/auth/providers").json() == {"google": True}
+    monkeypatch.setattr(server_mod.auth_mod, "google_exchange_code", lambda *a: "tok")
+    monkeypatch.setattr(
+        server_mod.auth_mod, "google_userinfo",
+        lambda *a: {"email": "g@x.co", "email_verified": True, "name": "Gu", "picture": "http://pic"},
+    )
+    client.cookies.clear()
+    started = client.get("/api/auth/google/start", follow_redirects=False)
+    assert started.status_code == 302 and "accounts.google.com" in started.headers["location"]
+    state = client.cookies.get("remo_oauth_state")
+    assert state
+    done = client.get(f"/api/auth/google/callback?code=c&state={state}", follow_redirects=False)
+    assert done.status_code == 302 and done.headers["location"] == "/app"
+    me = client.get("/api/me").json()["user"]
+    assert me["email"] == "g@x.co" and me["provider"] == "google" and me["avatar_url"] == "http://pic"
+
+
+def test_google_callback_rejects_bad_state(client: TestClient) -> None:
+    client.cookies.clear()
+    done = client.get("/api/auth/google/callback?code=c&state=nope", follow_redirects=False)
+    assert done.status_code == 302
+    assert done.headers["location"] == "/login?error=expired"
+    assert client.get("/api/me").status_code == 401
+
+
+def test_pdf_import_validates_and_extracts(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    assert client.post("/api/import/pdf", files={"file": ("x.txt", b"hello")}).status_code == 400
+    assert client.post("/api/import/pdf", files={"file": ("x.pdf", b"not a pdf")}).status_code == 400
+    big = b"%PDF" + b"0" * (10 * 1024 * 1024)
+    assert client.post("/api/import/pdf", files={"file": ("x.pdf", big)}).status_code == 413
+    assert client.post("/api/import/pdf", files={"file": ("x.pdf", b"%PDF-1.4 fake")}).status_code == 503
+    monkeypatch.setenv("GEMINI_API_KEY", "g-test")
+    monkeypatch.setattr(
+        server_mod.llm_mod, "extract_pdf_notes", lambda *a, **k: ["note one", "note two"]
+    )
+    done = client.post("/api/import/pdf", files={"file": ("maths.pdf", b"%PDF-1.4 fake")}).json()
+    assert done == {"filename": "maths.pdf", "notes": ["note one", "note two"]}
+
+
+def test_pdf_keep_saves_ticked_notes(client: TestClient) -> None:
+    kept = client.post(
+        "/api/import/keep", json={"notes": ["  note one  ", "", "note two"], "source": "maths.pdf"}
+    ).json()
+    assert kept == {"saved": 2}
+    notes = client.get("/api/state").json()["notes"]
+    assert [n["text"] for n in notes] == ["note two", "note one"]
+    assert all(n["source"] == "pdf:maths.pdf" for n in notes)
+    assert client.post("/api/import/keep", json={"notes": [], "source": "x"}).status_code == 400
