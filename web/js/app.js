@@ -106,17 +106,47 @@
 
   /* ---------- threads & inline player ---------- */
   const BAR_HEIGHTS = [38, 65, 90, 52, 78, 96, 62, 44, 84, 72, 48, 88, 66, 36];
+  function splitHead(text) {
+    // Long replies speak the first sentence ASAP, then the rest.
+    if (!text || text.length < 60) return null;
+    const m = text.match(/^(.+?[.!?…।]["'”’]?)(\s+|$)([\s\S]*)$/);
+    if (!m || !m[3].trim() || m[1].length < 15) return null;
+    return [m[1], m[3].trim()];
+  }
+
+  function rebindPill(pill, text, url) {
+    if (!pill) return;
+    const btn = pill.querySelector("button");
+    if (!btn) return;
+    btn.onclick = url ? () => play(url, null, pill) : () => speakInBackground(text, pill, null);
+  }
+
   async function speakInBackground(text, pill, done) {
+    const finish = () => { done && done(); };
     try {
-      const { audio_url } = await API.speak(text, store.lang);
-      if (pill) {
-        const btn = pill.querySelector("button");
-        if (btn) btn.onclick = () => play(audio_url, null, pill);
+      const parts = splitHead(text);
+      if (!parts) {
+        const { audio_url } = await API.speak(text, store.lang);
+        rebindPill(pill, text, audio_url);
+        play(audio_url, finish, pill);
+        return;
       }
-      play(audio_url, done, pill);
+      const [head, tail] = parts;
+      const first = await API.speak(head, store.lang);
+      const tailPromise = API.speak(tail, store.lang); // prefetched while head plays
+      rebindPill(pill, text, null);
+      play(first.audio_url, async () => {
+        try {
+          const second = await tailPromise;
+          play(second.audio_url, finish, pill);
+        } catch (err) {
+          toast(`Voice reply failed: ${err.message}`, true);
+          finish();
+        }
+      }, pill);
     } catch (err) {
       toast(`Voice reply failed: ${err.message}`, true);
-      done && done();
+      finish();
     }
   }
 

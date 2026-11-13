@@ -9,6 +9,7 @@ sent, never the whole memory.
 from __future__ import annotations
 
 import base64
+import concurrent.futures
 import hashlib
 import json
 import re
@@ -226,65 +227,131 @@ def _cooldown_seconds(exc: Exception, status: int = 0) -> float:
     return 60.0
 
 
+HEDGE_AFTER_SECONDS = 2.5
+HEDGE_MAX_RACING = 2
+
+
+class _Next(Exception):
+    """Try the next combination."""
+
+
+class _CoolCombo(_Next):
+    def __init__(self, combo: tuple[str, str], seconds: float) -> None:
+        super().__init__(str(combo))
+        self.combo = combo
+        self.seconds = seconds
+
+
+class _SkipKey(_Next):
+    def __init__(self, key: str) -> None:
+        super().__init__("bad key")
+        self.key = key
+
+
+class _Fatal(Exception):
+    """Do not try anything else."""
+
+
+def _attempt(key: str, model: str, parts: list[dict], system: str, timeout: float,
+             max_tokens: int, json_mode: bool) -> str:
+    generation_config: dict = {"temperature": 0.2 if not json_mode else 0.0,
+                               "maxOutputTokens": max_tokens}
+    cap = _thinking_cap(model)
+    if cap:
+        generation_config["thinkingConfig"] = cap
+    if json_mode:
+        generation_config["response_mime_type"] = "application/json"
+    body = {
+        "system_instruction": {"parts": [{"text": system}]},
+        "contents": [{"parts": parts}],
+        "generationConfig": generation_config,
+    }
+    try:
+        resp = _http().post(f"{_URL.format(model=model)}?key={key}", json=body, timeout=timeout)
+        resp.raise_for_status()
+        out = resp.json()["candidates"][0]["content"]["parts"]
+        return "".join(part.get("text", "") for part in out).strip()
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else 0
+        log.debug("model %s failed with %s", model, status)
+        if status == 403:
+            raise _SkipKey(key) from exc
+        if status in _RETRYABLE:
+            raise _CoolCombo(_cool_key(key, model), _cooldown_seconds(exc, status)) from exc
+        raise _Fatal() from exc
+    except (requests.Timeout, requests.ConnectionError) as exc:
+        log.debug("model %s unreachable: %s", model, exc)
+        raise _CoolCombo(_cool_key(key, model), 60.0) from exc
+    except (_Next, _Fatal):
+        raise
+    except Exception as exc:  # noqa: BLE001 - malformed reply: try the next model
+        log.debug("model %s gave a bad reply: %s", model, exc)
+        raise _Next() from exc
+
+
 def _generate(parts: list[dict], system: str, *, models: list[str], api_keys: list[str],
               timeout: float, max_tokens: int, json_mode: bool) -> str | None:
-    """Try each key, and each model per key; quota/server/timeout moves along.
+    """Race combinations: first success wins; a slow call never blocks the next.
 
-    Quota-dead combinations cool down, so a later call skips them instead of
-    burning seconds re-proving it; when everything is cooling, fail fast.
+    Cooling combos are skipped outright, so an all-dead pool fails fast.
+    Extra combinations race only while earlier ones are still slow.
     """
     _load_health()
-    http = _http()
+    now = time.time()
     combos = [(key, model) for key in api_keys for model in models]
-    combos.sort(key=lambda c: (time.time() < _COOLDOWNS.get(_cool_key(*c), 0),
+    combos.sort(key=lambda c: (now < _COOLDOWNS.get(_cool_key(*c), 0),
                                -_LAST_OK.get(_cool_key(*c), 0)))
+    combos = [c for c in combos if time.time() >= _COOLDOWNS.get(_cool_key(*c), 0)]
+    if not combos:
+        return None
     dead_keys: set[str] = set()
-    for key, model in combos:
-        if key in dead_keys:
-            continue
-        if time.time() < _COOLDOWNS.get(_cool_key(key, model), 0):
-            continue
-        generation_config: dict = {"temperature": 0.2 if not json_mode else 0.0,
-                                   "maxOutputTokens": max_tokens}
-        cap = _thinking_cap(model)
-        if cap:
-            generation_config["thinkingConfig"] = cap
-        if json_mode:
-            generation_config["response_mime_type"] = "application/json"
-        body = {
-            "system_instruction": {"parts": [{"text": system}]},
-            "contents": [{"parts": parts}],
-            "generationConfig": generation_config,
-        }
-        try:
-            resp = http.post(f"{_URL.format(model=model)}?key={key}", json=body,
-                             timeout=timeout)
-            resp.raise_for_status()
-            out = resp.json()["candidates"][0]["content"]["parts"]
-            text = "".join(part.get("text", "") for part in out).strip()
-        except requests.HTTPError as exc:
-            status = exc.response.status_code if exc.response is not None else 0
-            log.debug("model %s failed with %s", model, status)
-            if status == 403:
-                dead_keys.add(key)  # bad key: its other models fail the same way
-                continue
-            if status in _RETRYABLE:
-                _COOLDOWNS[_cool_key(key, model)] = time.time() + _cooldown_seconds(exc, status)
-                _save_health()
-                continue
-            return None
-        except (requests.Timeout, requests.ConnectionError) as exc:
-            log.debug("model %s unreachable: %s", model, exc)
-            _COOLDOWNS[_cool_key(key, model)] = time.time() + 60.0
-            _save_health()
-            continue
-        except Exception as exc:  # noqa: BLE001 - malformed reply: try the next model
-            log.debug("model %s gave a bad reply: %s", model, exc)
-            continue
-        if text:
-            _LAST_OK[_cool_key(key, model)] = time.time()
-            return text
-    return None
+    pending: dict[concurrent.futures.Future, tuple[str, str]] = {}
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=HEDGE_MAX_RACING,
+                                                 thread_name_prefix="llm-hedge")
+    try:
+        index = 0
+
+        def launch() -> None:
+            nonlocal index
+            while index < len(combos) and len(pending) < HEDGE_MAX_RACING:
+                combo = combos[index]
+                index += 1
+                if combo[0] in dead_keys:
+                    continue
+                key, model = combo
+                pending[pool.submit(_attempt, key, model, parts, system, timeout,
+                                    max_tokens, json_mode)] = combo
+                return
+
+        launch()
+        while pending:
+            done, _ = concurrent.futures.wait(pending, timeout=HEDGE_AFTER_SECONDS,
+                                              return_when=concurrent.futures.FIRST_COMPLETED)
+            for future in done:
+                combo = pending.pop(future)
+                try:
+                    text = future.result()
+                except _SkipKey as skipped:
+                    dead_keys.add(skipped.key)
+                    launch()
+                except _CoolCombo as cooled:
+                    _COOLDOWNS[cooled.combo] = time.time() + cooled.seconds
+                    _save_health()
+                    launch()
+                except _Next:
+                    launch()
+                except _Fatal:
+                    return None
+                else:
+                    if text:
+                        _LAST_OK[_cool_key(*combo)] = time.time()
+                        return text
+                    launch()
+            if not done:
+                launch()  # nothing finished in time: race the next combination
+        return None
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def parse_intent(transcript: str, *, context: str = "", model: str = "",

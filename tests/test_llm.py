@@ -180,6 +180,26 @@ def test_bare_429_cools_down_longer_than_transients() -> None:
     assert L._cooldown_seconds(err(429, "quota, retry in 5s"), 429) == 6.0
 
 
+def test_slow_first_race_is_won_by_second(monkeypatch: pytest.MonkeyPatch) -> None:
+    import time as _time
+
+    calls: list[str] = []
+
+    def flaky(url: str, json: dict | None = None, timeout: float = 0):
+        calls.append(url)
+        if "m1" in url:
+            _time.sleep(0.5)
+            return _ok_response("too slow")
+        return _ok_response("hedge wins")
+
+    monkeypatch.setattr(L, "HEDGE_AFTER_SECONDS", 0.05)
+    _stub_transport(monkeypatch, flaky)
+    start = _time.time()
+    assert L.compose("q?", ["note"], models=["m1", "m2"], api_keys=["K"]) == "hedge wins"
+    assert _time.time() - start < 0.45
+    assert len(calls) == 2
+
+
 def test_all_cooling_fails_fast_without_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     import requests
 
