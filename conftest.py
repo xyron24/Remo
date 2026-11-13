@@ -17,5 +17,6 @@ def _no_real_llm_key(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyP
     if "live" in request.keywords:
         return
     # Set-but-empty: dotenv never overrides real env, so the developer's
-    # .env key stays invisible whether it came from env or file.
+    # .env keys stay invisible whether they came from env or file.
     monkeypatch.setenv("GEMINI_API_KEY", "")
+    monkeypatch.setenv("GEMINI_API_KEYS", "")

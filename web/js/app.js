@@ -141,7 +141,7 @@
 
     const meta = document.createElement("span");
     meta.className = "audio-meta";
-    meta.textContent = `Timbre · ${SPEAKER_NAME[store.lang] || "Nalini"}`;
+    meta.textContent = `Timbre · ${store.voice || SPEAKER_NAME[store.lang] || "Nalini"}`;
 
     pill.appendChild(btn);
     pill.appendChild(bars);
@@ -688,6 +688,14 @@
   async function loadInfo() {
     try {
       const i = await API.info();
+      store.voice = i.voice || null;
+      document.querySelectorAll(".audio-meta").forEach((el) => {
+        el.textContent = `Timbre · ${store.voice}`;
+      });
+      if (i.voices) {
+        if ($("voice-hi")) $("voice-hi").textContent = i.voices["hi-IN"] || "";
+        if ($("voice-mr")) $("voice-mr").textContent = i.voices["mr-IN"] || "";
+      }
       $("app-info").innerHTML =
         `<dt>Version</dt><dd>${esc(i.version)}</dd><dt>Server language</dt><dd>${esc(i.language)}</dd>` +
         `<dt>Voice</dt><dd>${esc(i.voice)}</dd><dt>STT</dt><dd>${esc(i.stt_model)}</dd><dt>TTS</dt><dd>${esc(i.tts_model)}</dd>`;

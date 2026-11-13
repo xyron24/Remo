@@ -477,6 +477,7 @@ def info() -> JSONResponse:
         "version": _version,
         "language": settings.language,
         "voice": lang_mod.resolve_voice(settings.tts_voice, settings.language),
+        "voices": {code: lang_mod.resolve_voice(settings.tts_voice, code) for code in ("hi-IN", "mr-IN")},
         "stt_model": settings.stt_model,
         "tts_model": settings.tts_model,
     })
@@ -522,10 +523,9 @@ def import_pdf(file: UploadFile = File(...)) -> JSONResponse:
         raise HTTPException(status_code=400, detail="upload a real .pdf file")
     if len(raw) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="PDF too large (10 MB max)")
-    if not settings.gemini_api_key:
+    if not settings.gemini_api_keys:
         raise HTTPException(status_code=503, detail="set GEMINI_API_KEY to import PDFs")
-    notes = llm_mod.extract_pdf_notes(raw, filename=name, settings=settings,
-                                      api_key=settings.gemini_api_key)
+    notes = llm_mod.extract_pdf_notes(raw, filename=name, settings=settings)
     if not notes:
         raise HTTPException(status_code=502, detail="could not read that PDF; try another")
     return JSONResponse({"filename": name, "notes": notes})

@@ -58,16 +58,18 @@ def compose(
     model: str = "",
     models: list[str] | None = None,
     api_key: str = "",
+    api_keys: list[str] | None = None,
     timeout: float = TIMEOUT_SECONDS,
 ) -> str | None:
     """One grounded answer, or None when composing is impossible/failed."""
-    if not api_key or not notes or not question.strip():
+    keys = api_keys or ([api_key] if api_key else [])
+    if not keys or not notes or not question.strip():
         return None
     text = _generate(
         [{"text": _prompt(question, notes[:3], context)}],
         _SYSTEM.format(lang=_LANG_NAME.get(lang, _LANG_NAME["hi"])),
         models=models or ([model] if model else list(DEFAULT_MODELS)),
-        api_key=api_key, timeout=timeout, max_tokens=300, json_mode=False,
+        api_keys=keys, timeout=timeout, max_tokens=300, json_mode=False,
     )
     if not text:
         return None
@@ -120,54 +122,58 @@ def _thinking_cap(model: str) -> dict | None:
     return None
 
 
-def _generate(parts: list[dict], system: str, *, models: list[str], api_key: str,
+def _generate(parts: list[dict], system: str, *, models: list[str], api_keys: list[str],
               timeout: float, max_tokens: int, json_mode: bool) -> str | None:
-    """Try each model in order; quota/server/timeout errors move to the next."""
-    for model in models:
-        generation_config: dict = {"temperature": 0.2 if not json_mode else 0.0,
-                                   "maxOutputTokens": max_tokens}
-        cap = _thinking_cap(model)
-        if cap:
-            generation_config["thinkingConfig"] = cap
-        if json_mode:
-            generation_config["response_mime_type"] = "application/json"
-        body = {
-            "system_instruction": {"parts": [{"text": system}]},
-            "contents": [{"parts": parts}],
-            "generationConfig": generation_config,
-        }
-        try:
-            resp = requests.post(f"{_URL.format(model=model)}?key={api_key}", json=body,
-                                 timeout=timeout)
-            resp.raise_for_status()
-            parts = resp.json()["candidates"][0]["content"]["parts"]
-            text = "".join(part.get("text", "") for part in parts).strip()
-        except requests.HTTPError as exc:
-            status = exc.response.status_code if exc.response is not None else 0
-            log.debug("model %s failed with %s", model, status)
-            if status in _RETRYABLE:
+    """Try each key, and each model per key; quota/server/timeout moves along."""
+    for key in api_keys:
+        for model in models:
+            generation_config: dict = {"temperature": 0.2 if not json_mode else 0.0,
+                                       "maxOutputTokens": max_tokens}
+            cap = _thinking_cap(model)
+            if cap:
+                generation_config["thinkingConfig"] = cap
+            if json_mode:
+                generation_config["response_mime_type"] = "application/json"
+            body = {
+                "system_instruction": {"parts": [{"text": system}]},
+                "contents": [{"parts": parts}],
+                "generationConfig": generation_config,
+            }
+            try:
+                resp = requests.post(f"{_URL.format(model=model)}?key={key}", json=body,
+                                     timeout=timeout)
+                resp.raise_for_status()
+                out = resp.json()["candidates"][0]["content"]["parts"]
+                text = "".join(part.get("text", "") for part in out).strip()
+            except requests.HTTPError as exc:
+                status = exc.response.status_code if exc.response is not None else 0
+                log.debug("model %s failed with %s", model, status)
+                if status == 403:
+                    break  # bad key: other models on it will fail the same way
+                if status in _RETRYABLE:
+                    continue
+                return None
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                log.debug("model %s unreachable: %s", model, exc)
                 continue
-            return None
-        except (requests.Timeout, requests.ConnectionError) as exc:
-            log.debug("model %s unreachable: %s", model, exc)
-            continue
-        except Exception as exc:  # noqa: BLE001 - malformed replies are fatal, not retried
-            log.debug("model %s gave a bad reply: %s", model, exc)
-            return None
-        if text:
-            return text
-        return None
+            except Exception as exc:  # noqa: BLE001 - malformed reply: try the next model
+                log.debug("model %s gave a bad reply: %s", model, exc)
+                continue
+            if text:
+                return text
     return None
 
 
 def parse_intent(transcript: str, *, model: str = "", models: list[str] | None = None,
-                 api_key: str = "", timeout: float = TIMEOUT_SECONDS) -> dict | None:
+                 api_key: str = "", api_keys: list[str] | None = None,
+                 timeout: float = TIMEOUT_SECONDS) -> dict | None:
     """One transcript into {intent, slots}, or None when unparseable/failed."""
-    if not api_key or not transcript.strip():
+    keys = api_keys or ([api_key] if api_key else [])
+    if not keys or not transcript.strip():
         return None
     raw = _generate([{"text": f"Transcript: {transcript.strip()}"}], _INTENT_SYSTEM,
                     models=models or ([model] if model else list(DEFAULT_MODELS)),
-                    api_key=api_key, timeout=timeout, max_tokens=300, json_mode=True)
+                    api_keys=keys, timeout=timeout, max_tokens=300, json_mode=True)
     if raw is None:
         return None
     parsed = _parse_json_object(raw)
@@ -178,9 +184,9 @@ def parse_intent(transcript: str, *, model: str = "", models: list[str] | None =
 
 def try_intent(text: str, settings: Settings) -> dict | None:
     """Parse when a key is configured, else None (patterns take over)."""
-    if not settings.gemini_api_key:
+    if not settings.gemini_api_keys:
         return None
-    return parse_intent(text, models=list(settings.gemini_models), api_key=settings.gemini_api_key)
+    return parse_intent(text, models=list(settings.gemini_models), api_keys=list(settings.gemini_api_keys))
 
 
 _BRIEF_SYSTEM = (
@@ -192,9 +198,11 @@ _BRIEF_SYSTEM = (
 
 def compose_briefing(pending: list[str], changes: list[str], *, lang: str = "hi",
                      model: str = "", models: list[str] | None = None, api_key: str = "",
+                     api_keys: list[str] | None = None,
                      timeout: float = TIMEOUT_SECONDS) -> str | None:
     """A spoken welcome-back over pending work + fresh changes, or None on failure."""
-    if not api_key or (not pending and not changes):
+    keys = api_keys or ([api_key] if api_key else [])
+    if not keys or (not pending and not changes):
         return None
     lines = ["Pending work:"]
     lines += [f"- {p}" for p in pending[:6]]
@@ -205,7 +213,7 @@ def compose_briefing(pending: list[str], changes: list[str], *, lang: str = "hi"
         [{"text": "\n".join(lines)}],
         _BRIEF_SYSTEM.format(lang=_LANG_NAME.get(lang, _LANG_NAME["hi"])),
         models=models or ([model] if model else list(DEFAULT_MODELS)),
-        api_key=api_key, timeout=timeout, max_tokens=400, json_mode=False,
+        api_keys=keys, timeout=timeout, max_tokens=400, json_mode=False,
     )
     if not text:
         return None
@@ -215,14 +223,14 @@ def compose_briefing(pending: list[str], changes: list[str], *, lang: str = "hi"
 def try_briefing(entries: list[WorkEntry], deltas: list[tuple[WatchedItem, list[Change]]],
                  settings: Settings) -> str | None:
     """Brief when a key is configured and there is anything to say, else None."""
-    if not settings.gemini_api_key:
+    if not settings.gemini_api_keys:
         return None
     pending = [p for entry in entries for p in entry.pending[:3]]
     changes = [c.summary for _, items in deltas for c in items]
     if not pending and not changes:
         return None
     return compose_briefing(pending, changes, lang=lang_mod.lang_key(settings.language),
-                            models=list(settings.gemini_models), api_key=settings.gemini_api_key)
+                            models=list(settings.gemini_models), api_keys=list(settings.gemini_api_keys))
 
 
 PDF_MAX_NOTES = 12
@@ -245,7 +253,10 @@ def extract_pdf_notes(pdf_bytes: bytes, *, filename: str = "document.pdf",
                       model: str = "", models: list[str] | None = None, api_key: str = "",
                       timeout: float = 60.0, settings: Settings | None = None) -> list[str] | None:
     """Ask Gemini to read a PDF and propose short notes; None on any failure."""
-    if not api_key or not pdf_bytes:
+    keys = list(settings.gemini_api_keys) if settings else ([api_key] if api_key else [])
+    resolved_models = models or ([model] if model else
+                                 (list(settings.gemini_models) if settings else list(DEFAULT_MODELS)))
+    if not keys or not pdf_bytes:
         return None
     file_part = {"inline_data": {"mime_type": "application/pdf",
                                  "data": base64.b64encode(pdf_bytes).decode()}}
@@ -253,8 +264,8 @@ def extract_pdf_notes(pdf_bytes: bytes, *, filename: str = "document.pdf",
         [file_part, {"text": _PDF_PROMPT.format(
             filename=filename or "document.pdf", limit=PDF_MAX_NOTES, chars=PDF_NOTE_CHARS)}],
         "You turn documents into short spoken-study notes.",
-        models=models or ([model] if model else list(settings.gemini_models) if settings else list(DEFAULT_MODELS)),
-        api_key=api_key, timeout=timeout, max_tokens=1200, json_mode=False,
+        models=resolved_models,
+        api_keys=keys, timeout=timeout, max_tokens=1200, json_mode=False,
     )
     if not text:
         return None
@@ -268,7 +279,7 @@ def extract_pdf_notes(pdf_bytes: bytes, *, filename: str = "document.pdf",
 
 def try_compose(question: str, notes: list[Note], mem: Memory, settings: Settings) -> str | None:
     """Compose over retrieved notes when a key is configured, else None."""
-    if not settings.gemini_api_key or not notes:
+    if not settings.gemini_api_keys or not notes:
         return None
     context = recall_mod.describe_note(notes[0], mem)
     return compose(
@@ -277,5 +288,5 @@ def try_compose(question: str, notes: list[Note], mem: Memory, settings: Setting
         context=context,
         lang=lang_mod.lang_key(settings.language),
         models=list(settings.gemini_models),
-        api_key=settings.gemini_api_key,
+        api_keys=list(settings.gemini_api_keys),
     )

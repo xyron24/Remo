@@ -103,7 +103,7 @@ def handle_text(text: str, *, mem: Memory, settings: Settings | None = None, spe
     settings = settings or load_settings()
     s = lang_mod.strings(settings.language)
 
-    if settings.gemini_api_key:
+    if settings.gemini_api_keys:
         decided = _llm_turn(text, mem=mem, settings=settings, speak=speak, s=s)
         if decided is not None:
             return decided

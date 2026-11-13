@@ -37,6 +37,7 @@ class Settings:
     tts_voice: str = ""  # blank = best voice for the language (see remo.lang)
     language: str = "hi-IN"
     gemini_api_key: str = ""
+    gemini_api_keys: tuple[str, ...] = ()
     gemini_models: tuple[str, ...] = ("gemini-2.5-flash", "gemini-3-flash-preview")
     google_client_id: str = ""
     google_client_secret: str = ""
@@ -60,6 +61,9 @@ def load_settings(env_path: Path | None = None) -> Settings:
         tts_voice=get("GNANI_TTS_VOICE", defaults.tts_voice),
         language=get("REMO_LANG", defaults.language),
         gemini_api_key=get("GEMINI_API_KEY", ""),
+        gemini_api_keys=tuple(dict.fromkeys(
+            k.strip() for k in [get("GEMINI_API_KEY", ""), *get("GEMINI_API_KEYS", "").split(",")] if k.strip()
+        )),
         gemini_models=tuple(m.strip() for m in get("GEMINI_MODELS", "").split(",") if m.strip()) or defaults.gemini_models,
         google_client_id=get("GOOGLE_CLIENT_ID", ""),
         google_client_secret=get("GOOGLE_CLIENT_SECRET", ""),

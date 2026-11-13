@@ -16,6 +16,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("REMO_DB", str(tmp_path / "remo.db"))
     monkeypatch.setenv("REMO_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("GNANI_API_KEY", "test-key")
+    monkeypatch.setenv("GNANI_TTS_MODEL", "timbre-v2.5")
+    monkeypatch.setenv("GNANI_TTS_VOICE", "")
 
     def fake_synth(text, settings=None, **kwargs):
         from remo.paths import data_dir

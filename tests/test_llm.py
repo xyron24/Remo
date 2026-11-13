@@ -105,6 +105,25 @@ def test_auth_error_does_not_retry(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(calls) == 1
 
 
+def test_dead_key_moves_to_next_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    import requests
+
+    calls: list[str] = []
+
+    def flaky(url: str, json: dict | None = None, timeout: float = 0):
+        calls.append(url)
+        if "key=AAA" in url:
+            response = requests.Response()
+            response.status_code = 429
+            raise requests.HTTPError("quota", response=response)
+        return _ok_response("second key answers.")
+
+    monkeypatch.setattr("remo.llm.requests.post", flaky)
+    out = L.compose("q?", ["note"], models=["m1"], api_keys=["AAA", "BBB"])
+    assert out == "second key answers."
+    assert any("key=BBB" in url for url in calls)
+
+
 def test_extract_pdf_notes_parses_lines(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict = {}
 

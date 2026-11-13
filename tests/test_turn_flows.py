@@ -116,7 +116,7 @@ def test_llm_answer_used_when_available(mem: Memory, monkeypatch: pytest.MonkeyP
     _run("yaad rakhna kal kirana se atta lena hai", mem)
     monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: None)
     monkeypatch.setattr(llm_mod, "compose", lambda *a, **k: "Kal atta lena hai, kirana se.")
-    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    settings = Settings(gnani_api_key="test-key", gemini_api_keys=("g-test",))
     result = turn_mod.handle_text("kirana se kya lena hai?", mem=mem, settings=settings, speak=False)
     assert result.action == "recall"
     assert result.text == "Kal atta lena hai, kirana se."
@@ -129,7 +129,7 @@ def test_llm_failure_falls_back_to_extractive(mem: Memory, monkeypatch: pytest.M
     _run("yaad rakhna kal kirana se atta lena hai", mem)
     monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: None)
     monkeypatch.setattr(llm_mod, "compose", lambda *a, **k: None)
-    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    settings = Settings(gnani_api_key="test-key", gemini_api_keys=("g-test",))
     result = turn_mod.handle_text("kirana se kya lena hai?", mem=mem, settings=settings, speak=False)
     assert result.action == "recall"
     assert "Aapne kaha tha" in result.text
@@ -142,7 +142,7 @@ def test_llm_first_understands_everything(mem: Memory, monkeypatch: pytest.Monke
     monkeypatch.setattr(
         llm_mod, "try_intent", lambda *a, **k: {"intent": "save", "save_text": "ye sab karna"}
     )
-    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    settings = Settings(gnani_api_key="test-key", gemini_api_keys=("g-test",))
     result = turn_mod.handle_text("remember, ye sab karna", mem=mem, settings=settings, speak=False)
     assert result.action == "saved"
     assert "yaad rakh lunga" in result.text
@@ -156,7 +156,7 @@ def test_llm_other_speaks_guarded_reply(mem: Memory, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(
         llm_mod, "try_intent", lambda *a, **k: {"intent": "other", "reply": "Namaste! Kaise ho?"}
     )
-    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    settings = Settings(gnani_api_key="test-key", gemini_api_keys=("g-test",))
     result = turn_mod.handle_text("namaste", mem=mem, settings=settings, speak=False)
     assert result.action == "chat"
     assert result.text == "Namaste! Kaise ho?"
@@ -167,7 +167,7 @@ def test_llm_intent_none_uses_patterns(mem: Memory, monkeypatch: pytest.MonkeyPa
     from remo import turn as turn_mod
 
     monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: None)
-    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    settings = Settings(gnani_api_key="test-key", gemini_api_keys=("g-test",))
     result = turn_mod.handle_text("yaad rakhna chai pini hai", mem=mem, settings=settings, speak=False)
     assert result.action == "saved"
     assert "Yaad kar liya" in result.text
@@ -177,7 +177,7 @@ def test_llm_forget_remind_quiz_briefing_dispatch(mem: Memory, monkeypatch: pyte
     from remo import llm as llm_mod
     from remo import turn as turn_mod
 
-    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    settings = Settings(gnani_api_key="test-key", gemini_api_keys=("g-test",))
     _run("yaad rakhna maths mein integration ho gaya", mem)
 
     monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: {"intent": "forget", "target": "maths"})
@@ -259,7 +259,7 @@ def test_llm_add_task_dispatch(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         llm_mod, "try_intent", lambda *a, **k: {"intent": "add_task", "task_text": "call mummy"}
     )
-    settings = Settings(gnani_api_key="test-key", gemini_api_key="g-test")
+    settings = Settings(gnani_api_key="test-key", gemini_api_keys=("g-test",))
     result = turn_mod.handle_text("mummy ko call karna hai, yaad rakhna", mem=mem, settings=settings, speak=False)
     assert result.action == "task_added"
     assert mem.find_work_entry("", "") is not None
