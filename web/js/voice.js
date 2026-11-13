@@ -1,5 +1,43 @@
-/* Voice capture: mic -> 16kHz mono WAV + live level meter. No mock audio. */
+/* Voice capture: live 16kHz PCM streaming over WebSocket, MediaRecorder upload fallback. */
 window.RemoVoice = (() => {
+  const WORKLET_CODE = `
+    class RemoTap extends AudioWorkletProcessor {
+      constructor() {
+        super();
+        this.ratio = (sampleRate || 48000) / 16000;
+        this.buf = [];
+      }
+      process(inputs) {
+        const ch = inputs[0] && inputs[0][0];
+        if (!ch) return true;
+        for (let i = 0; i < ch.length; i += this.ratio) {
+          const idx = Math.floor(i), frac = i - idx;
+          const a = ch[idx] || 0, b = ch[idx + 1] || 0;
+          this.buf.push(a + (b - a) * frac);
+          if (this.buf.length >= 1600) {
+            const out = new Int16Array(1600);
+            for (let j = 0; j < 1600; j++) {
+              const s = Math.max(-1, Math.min(1, this.buf[j]));
+              out[j] = s < 0 ? s * 0x8000 : s * 0x7fff;
+            }
+            this.port.postMessage(out.buffer, [out.buffer]);
+            this.buf.splice(0, 1600);
+          }
+        }
+        return true;
+      }
+    }
+    registerProcessor("remo-tap", RemoTap);
+  `;
+
+  let workletUrl = null;
+  function tapModuleUrl() {
+    if (!workletUrl) {
+      workletUrl = URL.createObjectURL(new Blob([WORKLET_CODE], { type: "application/javascript" }));
+    }
+    return workletUrl;
+  }
+
   function encodeWav(samples, rate) {
     const buf = new ArrayBuffer(44 + samples.length * 2);
     const v = new DataView(buf);
@@ -32,10 +70,12 @@ window.RemoVoice = (() => {
     }
   }
 
-  function createSession({ onLevel, onDone, onError }) {
+  function createSession({ onLevel, onDone, onError, onPartial, onResult }) {
     let stream = null, recorder = null, actx = null, analyser = null, raf = 0;
     let parts = [];
     let live = false;
+    let mode = null;
+    let ws = null, tapNode = null, resultTimer = 0, gotResult = false;
 
     function tick() {
       if (!live || !analyser) return;
@@ -45,7 +85,27 @@ window.RemoVoice = (() => {
       raf = requestAnimationFrame(tick);
     }
 
-    async function start() {
+    function teardownMedia() {
+      cancelAnimationFrame(raf);
+      try { tapNode && tapNode.disconnect(); } catch { /* already gone */ }
+      tapNode = null;
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      stream = null;
+      if (actx) actx.close().catch(() => {});
+      actx = null;
+      analyser = null;
+    }
+
+    function teardownWs() {
+      clearTimeout(resultTimer);
+      if (ws) {
+        try { ws.onmessage = ws.onerror = ws.onclose = null; ws.close(); } catch { /* gone */ }
+        ws = null;
+      }
+    }
+
+    async function startUpload() {
+      mode = "upload";
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       actx = new (window.AudioContext || window.webkitAudioContext)();
       const src = actx.createMediaStreamSource(stream);
@@ -56,9 +116,7 @@ window.RemoVoice = (() => {
       recorder = new MediaRecorder(stream);
       recorder.ondataavailable = (e) => { if (e.data.size) parts.push(e.data); };
       recorder.onstop = async () => {
-        cancelAnimationFrame(raf);
-        stream.getTracks().forEach((t) => t.stop());
-        actx.close().catch(() => {});
+        teardownMedia();
         live = false;
         try {
           const wav = await to16kWav(new Blob(parts, { type: recorder.mimeType || "audio/webm" }));
@@ -72,7 +130,94 @@ window.RemoVoice = (() => {
       if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) tick();
     }
 
+    async function startStream(url) {
+      mode = "stream";
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      if (!actx.audioWorklet || !actx.audioWorklet.addModule) throw new Error("no worklet");
+      const src = actx.createMediaStreamSource(stream);
+      analyser = actx.createAnalyser();
+      analyser.fftSize = 256;
+      src.connect(analyser);
+      await actx.audioWorklet.addModule(tapModuleUrl());
+      tapNode = new AudioWorkletNode(actx, "remo-tap");
+      src.connect(tapNode);
+      ws = new WebSocket(url);
+      gotResult = false;
+      await new Promise((resolve, reject) => {
+        ws.onopen = resolve;
+        ws.onerror = () => reject(new Error("live loop unreachable"));
+      });
+      tapNode.port.onmessage = (e) => {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(e.data);
+      };
+      ws.onmessage = (e) => {
+        let msg = null;
+        try { msg = JSON.parse(e.data); } catch { return; }
+        if (!msg || typeof msg !== "object") return;
+        if (msg.type === "partial" && msg.text) onPartial && onPartial(msg.text);
+        else if (msg.type === "result") {
+          gotResult = true;
+          live = false;
+          teardownMedia();
+          teardownWs();
+          onResult && onResult(msg);
+        } else if (msg.type === "error") {
+          live = false;
+          teardownMedia();
+          teardownWs();
+          onError && onError(new Error(msg.message || "live loop failed"));
+        }
+      };
+      ws.onclose = () => {
+        if (!gotResult && live) {
+          live = false;
+          teardownMedia();
+          teardownWs();
+          onError && onError(new Error("live loop dropped"));
+        }
+      };
+      live = true;
+      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) tick();
+    }
+
+    async function start(streamUrl) {
+      if (streamUrl && window.WebSocket) {
+        try {
+          await startStream(streamUrl);
+          return;
+        } catch (err) {
+          // Mic denials surface identically from the fallback; anything else
+          // (no worklet, no socket) just means this browser streams nothing.
+          teardownMedia();
+          teardownWs();
+        }
+      }
+      await startUpload();
+    }
+
     function stop() {
+      if (mode === "stream") {
+        if (tapNode) { try { tapNode.disconnect(); } catch { /* gone */ } tapNode = null; }
+        if (stream) stream.getTracks().forEach((t) => t.stop());
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "end" }));
+          resultTimer = setTimeout(() => {
+            if (!gotResult) {
+              live = false;
+              teardownMedia();
+              teardownWs();
+              onError && onError(new Error("live loop timed out"));
+            }
+          }, 20000);
+        } else {
+          live = false;
+          teardownMedia();
+          teardownWs();
+          onError && onError(new Error("live loop dropped"));
+        }
+        return;
+      }
       if (recorder && recorder.state !== "inactive") recorder.stop();
       else {
         live = false;

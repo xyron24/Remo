@@ -254,41 +254,57 @@
 
   /* ---------- voice widget ---------- */
   function makeVoice({ micBtn, cardEl, stateEl, timerEl, heardEl, waveEl, box, autoPlay = true }) {
+    function renderTurnData(data) {
+      store.pending = data.pending || null;
+      showPendingChip();
+      if (data.transcript) {
+        heardEl.textContent = `Heard: "${data.transcript}"`;
+        heardEl.hidden = false;
+        addTurn(box, "You", data.transcript, null);
+      }
+      const pill = addTurn(box, "Remo", data.text, data);
+      setState("responding", "Here is what I found");
+      setSide("speaking", "Speaking");
+      const end = () => {
+        setState("idle", "Tap the mic or press Space to talk");
+        setSide("ready", "Ready");
+        refresh();
+      };
+      if (autoPlay && store.autoplay) {
+        speakInBackground(data.text, pill, end);
+      } else {
+        end();
+      }
+    }
+
+    function settleRecording() {
+      stopTimer();
+      if (cardEl) cardEl.classList.remove("is-live");
+      idleWave(waveEl);
+      setState("processing", "Thinking…");
+      setSide("thinking", "Thinking");
+    }
+
     const session = window.RemoVoice.createSession({
       onLevel: (data) => drawWave(waveEl, data, true),
+      onPartial: (text) => {
+        heardEl.textContent = `Heard: "${text}"`;
+        heardEl.hidden = false;
+      },
       onDone: async (wav) => {
-        stopTimer();
-        if (cardEl) cardEl.classList.remove("is-live");
-        idleWave(waveEl);
-        setState("processing", "Thinking…");
-        setSide("thinking", "Thinking");
+        settleRecording();
         try {
           const data = await API.turnAudio(wav, store.lang, store.pending, false);
-          store.pending = data.pending || null;
-          showPendingChip();
-          if (data.transcript) {
-            heardEl.textContent = `Heard: "${data.transcript}"`;
-            heardEl.hidden = false;
-            addTurn(box, "You", data.transcript, null);
-          }
-          const pill = addTurn(box, "Remo", data.text, data);
-          setState("responding", "Here is what I found");
-          setSide("speaking", "Speaking");
-          const end = () => {
-            setState("idle", "Tap the mic or press Space to talk");
-            setSide("ready", "Ready");
-            refresh();
-          };
-          if (autoPlay && store.autoplay) {
-            speakInBackground(data.text, pill, end);
-          } else {
-            end();
-          }
+          renderTurnData(data);
         } catch (err) {
           setState("error", `Could not reach Remo (${err.message})`);
           setSide("bad", "Error");
           toast(`Voice turn failed: ${err.message}`, true);
         }
+      },
+      onResult: (data) => {
+        settleRecording();
+        renderTurnData(data);
       },
       onError: (err) => {
         stopTimer();
@@ -315,11 +331,22 @@
       stateEl.classList.toggle("err", mode === "error");
       micBtn.classList.toggle("live", mode === "listening");
     }
+    function streamUrl() {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const params = `lang=${encodeURIComponent(store.lang)}&pending=${encodeURIComponent(JSON.stringify(store.pending || {}))}`;
+      return `${proto}://${location.host}/api/turn/audio-stream?${params}`;
+    }
+
     async function toggle() {
-      if (session.isLive()) { session.stop(); return; }
+      if (session.isLive()) {
+        setState("processing", "Thinking…");
+        setSide("thinking", "Thinking");
+        session.stop();
+        return;
+      }
       heardEl.hidden = true;
       try {
-        await session.start();
+        await session.start(streamUrl());
         startTimer();
         if (cardEl) cardEl.classList.add("is-live");
         setState("listening", "Listening… tap mic or press Space when done");

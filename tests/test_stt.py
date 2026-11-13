@@ -6,6 +6,7 @@ import pytest
 
 from remo.config import Settings
 from remo.stt import (
+    LiveSession,
     parse_server_message,
     stream_headers,
     transcribe_frames,
@@ -130,3 +131,70 @@ def test_server_error_raises() -> None:
 def test_missing_key_refuses_to_connect() -> None:
     with pytest.raises(RuntimeError, match="GNANI_API_KEY"):
         asyncio.run(transcribe_frames([b"\x00" * 1024], settings=Settings(gnani_api_key="")))
+
+
+async def _run_live(sock, chunks):
+    partials = []
+    async with LiveSession(settings=_settings(), idle_timeout=0.05,
+                           connect_factory=lambda _h: _FakeConnection(sock),
+                           on_segment=partials.append) as live:
+        for chunk in chunks:
+            await live.send(chunk)
+        result = await live.finish()
+    return result, partials, sock
+
+
+def test_live_session_streams_and_closes_out() -> None:
+    sock = _FakeSocket([
+        json.dumps({"type": "transcript", "text": "नमस्ते"}),
+        json.dumps({"type": "transcript", "text": "कैसे हो"}),
+    ])
+    result, partials, sock = asyncio.run(_run_live(sock, [b"\x01" * 500, b"\x02" * 2000]))
+    assert result.text == "नमस्ते कैसे हो"
+    assert result.retried is False
+    assert [p.text for p in partials] == ["नमस्ते", "कैसे हो"]
+    assert sock.sent and all(isinstance(f, bytes) and len(f) == 1024 for f in sock.sent)
+    assert len(sock.sent) > 3  # audio frames plus the silence tail
+
+
+def test_live_session_replays_buffer_once_when_empty() -> None:
+    calls = []
+
+    def factory(_headers):
+        calls.append(True)
+        sock = _FakeSocket(
+            [] if len(calls) == 1 else [json.dumps({"type": "transcript", "text": "दूसरी बार"})]
+        )
+        factory.socks.append(sock)
+        return _FakeConnection(sock)
+
+    factory.socks = []
+
+    async def go():
+        async with LiveSession(settings=_settings(), idle_timeout=0.05,
+                               connect_factory=factory) as live:
+            await live.send(b"\x03" * (21 * 1024))
+            return await live.finish()
+
+    result = asyncio.run(go())
+    assert result.text == "दूसरी बार"
+    assert result.retried is True
+    assert len(calls) == 2
+    assert sum(len(s.sent) for s in factory.socks) > 21  # replay resent the buffer
+
+
+def test_live_session_guards_unstarted_use() -> None:
+    async def go():
+        live = LiveSession(settings=_settings())
+        try:
+            await live.send(b"\x00" * 100)
+            raise AssertionError("send should refuse")
+        except RuntimeError:
+            pass
+        try:
+            await live.finish()
+            raise AssertionError("finish should refuse")
+        except RuntimeError:
+            pass
+
+    asyncio.run(go())

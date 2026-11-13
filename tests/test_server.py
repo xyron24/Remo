@@ -310,3 +310,72 @@ def test_pdf_keep_saves_ticked_notes(client: TestClient) -> None:
     assert [n["text"] for n in notes] == ["note two", "note one"]
     assert all(n["source"] == "pdf:maths.pdf" for n in notes)
     assert client.post("/api/import/keep", json={"notes": [], "source": "x"}).status_code == 400
+
+
+class _FakeLive:
+    def __init__(self, *args, on_segment=None, **kwargs) -> None:
+        from remo.stt import Segment
+
+        self._on_segment = on_segment
+        self._seg = Segment(text="yaad rakhna chai pini hai")
+        self.sent: list[bytes] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args) -> bool:
+        return False
+
+    async def send(self, pcm: bytes) -> None:
+        self.sent.append(pcm)
+        if self._on_segment is not None:
+            self._on_segment(self._seg)
+
+    async def finish(self):
+        from remo.stt import TranscriptionResult
+
+        return TranscriptionResult(text="yaad rakhna chai pini hai", segments=[self._seg])
+
+
+def test_audio_stream_turn_end_to_end(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(server_mod, "LiveSession", _FakeLive)
+    with client.websocket_connect("/api/turn/audio-stream?lang=hi-IN&pending=%7B%7D") as ws:
+        ws.send_bytes(b"\x01" * 3200)
+        ws.send_json({"type": "end"})
+        frames = []
+        for _ in range(5):
+            try:
+                frames.append(ws.receive_json())
+            except Exception:
+                break
+            if frames[-1].get("type") == "result":
+                break
+    partials = [f for f in frames if f.get("type") == "partial"]
+    results = [f for f in frames if f.get("type") == "result"]
+    assert partials and "chai pini hai" in partials[0]["text"]
+    assert len(results) == 1
+    assert results[0]["action"] == "saved"
+    assert results[0]["transcript"] == "yaad rakhna chai pini hai"
+    assert results[0]["audio_url"] is None  # text-first; voice via /api/speak
+    assert "chai pini hai" in client.get("/api/state").json()["notes"][0]["text"]
+
+
+def test_audio_stream_rejects_anonymous(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("REMO_DB", str(tmp_path / "remo.db"))
+    monkeypatch.setenv("REMO_DATA_DIR", str(tmp_path / "data"))
+    anon = TestClient(server_mod.app)
+    with anon.websocket_connect("/api/turn/audio-stream") as ws:
+        import starlette.websockets as starlette_ws
+
+        try:
+            ws.receive_text()
+            raise AssertionError("expected close")
+        except starlette_ws.WebSocketDisconnect as exc:
+            assert exc.code == 4401
+
+
+def test_audio_stream_rejects_bad_lang(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(server_mod, "LiveSession", _FakeLive)
+    with client.websocket_connect("/api/turn/audio-stream?lang=xx-YY") as ws:
+        frame = ws.receive_json()
+        assert frame["type"] == "error"

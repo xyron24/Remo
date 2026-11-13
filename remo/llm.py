@@ -137,7 +137,11 @@ def _thinking_cap(model: str) -> dict | None:
 
 _tls = threading.local()
 _COOLDOWNS: dict[tuple[str, str], float] = {}
+_LAST_OK: dict[tuple[str, str], float] = {}
 _RETRY_RE = re.compile(r"retry in ([\d.]+)s", re.IGNORECASE)
+_HEALTH_PATH: str | None = None
+_HEALTH_LOCK = threading.Lock()
+_HEALTH_LOADED = False
 
 
 def _http() -> requests.Session:
@@ -153,13 +157,72 @@ def _cool_key(key: str, model: str) -> tuple[str, str]:
     return (hashlib.sha256(key.encode()).hexdigest()[:16], model)
 
 
-def _cooldown_seconds(exc: Exception) -> float:
+def configure_health(path: str | None) -> None:
+    """Point health persistence at PATH (tests); None restores the default file."""
+    global _HEALTH_PATH, _HEALTH_LOADED
+    with _HEALTH_LOCK:
+        _HEALTH_PATH = path
+        _HEALTH_LOADED = False
+
+
+def _health_file() -> str:
+    if _HEALTH_PATH is not None:
+        return _HEALTH_PATH
+    from remo.paths import data_dir
+
+    return str(data_dir() / "llm_health.json")
+
+
+def _load_health() -> None:
+    """Cooldowns survive restarts; a redeploy must not re-probe dead pools."""
+    global _HEALTH_LOADED
+    with _HEALTH_LOCK:
+        if _HEALTH_LOADED:
+            return
+        _HEALTH_LOADED = True
+        try:
+            with open(_health_file(), encoding="utf-8") as f:
+                saved = json.load(f)
+        except (OSError, ValueError):
+            return
+    now = time.time()
+    for combo, until in (saved.get("cooldowns") or {}).items():
+        try:
+            key_hash, model = combo.split(" ", 1)
+            if float(until) > now:
+                _COOLDOWNS[(key_hash, model)] = float(until)
+        except (ValueError, TypeError, AttributeError):
+            continue
+    for combo, stamp in (saved.get("last_ok") or {}).items():
+        try:
+            key_hash, model = combo.split(" ", 1)
+            _LAST_OK[(key_hash, model)] = float(stamp)
+        except (ValueError, TypeError, AttributeError):
+            continue
+
+
+def _save_health() -> None:
+    with _HEALTH_LOCK:
+        payload = {
+            "cooldowns": {f"{k} {m}": u for (k, m), u in _COOLDOWNS.items()},
+            "last_ok": {f"{k} {m}": t for (k, m), t in _LAST_OK.items()},
+        }
+        try:
+            with open(_health_file(), "w", encoding="utf-8") as f:
+                json.dump(payload, f)
+        except OSError:
+            pass
+
+
+def _cooldown_seconds(exc: Exception, status: int = 0) -> float:
     match = _RETRY_RE.search(str(exc))
     if match:
         try:
             return min(float(match.group(1)) + 1.0, 300.0)
         except ValueError:
             pass
+    if status == 429:
+        return 600.0  # quota pools recover in minutes-to-hours, not seconds
     return 60.0
 
 
@@ -170,47 +233,57 @@ def _generate(parts: list[dict], system: str, *, models: list[str], api_keys: li
     Quota-dead combinations cool down, so a later call skips them instead of
     burning seconds re-proving it; when everything is cooling, fail fast.
     """
+    _load_health()
     http = _http()
-    for key in api_keys:
-        for model in models:
-            if time.time() < _COOLDOWNS.get(_cool_key(key, model), 0):
+    combos = [(key, model) for key in api_keys for model in models]
+    combos.sort(key=lambda c: (time.time() < _COOLDOWNS.get(_cool_key(*c), 0),
+                               -_LAST_OK.get(_cool_key(*c), 0)))
+    dead_keys: set[str] = set()
+    for key, model in combos:
+        if key in dead_keys:
+            continue
+        if time.time() < _COOLDOWNS.get(_cool_key(key, model), 0):
+            continue
+        generation_config: dict = {"temperature": 0.2 if not json_mode else 0.0,
+                                   "maxOutputTokens": max_tokens}
+        cap = _thinking_cap(model)
+        if cap:
+            generation_config["thinkingConfig"] = cap
+        if json_mode:
+            generation_config["response_mime_type"] = "application/json"
+        body = {
+            "system_instruction": {"parts": [{"text": system}]},
+            "contents": [{"parts": parts}],
+            "generationConfig": generation_config,
+        }
+        try:
+            resp = http.post(f"{_URL.format(model=model)}?key={key}", json=body,
+                             timeout=timeout)
+            resp.raise_for_status()
+            out = resp.json()["candidates"][0]["content"]["parts"]
+            text = "".join(part.get("text", "") for part in out).strip()
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else 0
+            log.debug("model %s failed with %s", model, status)
+            if status == 403:
+                dead_keys.add(key)  # bad key: its other models fail the same way
                 continue
-            generation_config: dict = {"temperature": 0.2 if not json_mode else 0.0,
-                                       "maxOutputTokens": max_tokens}
-            cap = _thinking_cap(model)
-            if cap:
-                generation_config["thinkingConfig"] = cap
-            if json_mode:
-                generation_config["response_mime_type"] = "application/json"
-            body = {
-                "system_instruction": {"parts": [{"text": system}]},
-                "contents": [{"parts": parts}],
-                "generationConfig": generation_config,
-            }
-            try:
-                resp = http.post(f"{_URL.format(model=model)}?key={key}", json=body,
-                                 timeout=timeout)
-                resp.raise_for_status()
-                out = resp.json()["candidates"][0]["content"]["parts"]
-                text = "".join(part.get("text", "") for part in out).strip()
-            except requests.HTTPError as exc:
-                status = exc.response.status_code if exc.response is not None else 0
-                log.debug("model %s failed with %s", model, status)
-                if status == 403:
-                    break  # bad key: other models on it will fail the same way
-                if status in _RETRYABLE:
-                    _COOLDOWNS[_cool_key(key, model)] = time.time() + _cooldown_seconds(exc)
-                    continue
-                return None
-            except (requests.Timeout, requests.ConnectionError) as exc:
-                log.debug("model %s unreachable: %s", model, exc)
-                _COOLDOWNS[_cool_key(key, model)] = time.time() + 60.0
+            if status in _RETRYABLE:
+                _COOLDOWNS[_cool_key(key, model)] = time.time() + _cooldown_seconds(exc, status)
+                _save_health()
                 continue
-            except Exception as exc:  # noqa: BLE001 - malformed reply: try the next model
-                log.debug("model %s gave a bad reply: %s", model, exc)
-                continue
-            if text:
-                return text
+            return None
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            log.debug("model %s unreachable: %s", model, exc)
+            _COOLDOWNS[_cool_key(key, model)] = time.time() + 60.0
+            _save_health()
+            continue
+        except Exception as exc:  # noqa: BLE001 - malformed reply: try the next model
+            log.debug("model %s gave a bad reply: %s", model, exc)
+            continue
+        if text:
+            _LAST_OK[_cool_key(key, model)] = time.time()
+            return text
     return None
 
 

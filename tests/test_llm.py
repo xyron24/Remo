@@ -36,10 +36,14 @@ def _stub_transport(monkeypatch: pytest.MonkeyPatch, post) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _fresh_cooldowns():
+def _fresh_cooldowns(tmp_path):
     L._COOLDOWNS.clear()
+    L._LAST_OK.clear()
+    L.configure_health(str(tmp_path / "health.json"))
     yield
     L._COOLDOWNS.clear()
+    L._LAST_OK.clear()
+    L.configure_health(None)
 
 
 def test_compose_returns_grounded_text_and_sends_notes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -163,6 +167,19 @@ def test_quota_dead_combo_is_skipped_next_time(monkeypatch: pytest.MonkeyPatch) 
     assert len([u for u in calls if "m2" in u]) == 2
 
 
+def test_bare_429_cools_down_longer_than_transients() -> None:
+    import requests
+
+    def err(status: int, message: str) -> requests.HTTPError:
+        response = requests.Response()
+        response.status_code = status
+        return requests.HTTPError(message, response=response)
+
+    assert L._cooldown_seconds(err(429, "quota exceeded"), 429) == 600.0
+    assert L._cooldown_seconds(err(503, "overloaded"), 503) == 60.0
+    assert L._cooldown_seconds(err(429, "quota, retry in 5s"), 429) == 6.0
+
+
 def test_all_cooling_fails_fast_without_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     import requests
 
@@ -177,6 +194,34 @@ def test_all_cooling_fails_fast_without_calls(monkeypatch: pytest.MonkeyPatch) -
     _stub_transport(monkeypatch, lambda *a, **k: calls.append(1) or _ok_response("x"))
     assert L.compose("q?", ["note"], models=["m1"], api_keys=["K"]) is None
     assert calls == []
+
+
+def test_cooldown_survives_restart(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    import requests
+
+    def always_quota(url: str, json: dict | None = None, timeout: float = 0):
+        response = requests.Response()
+        response.status_code = 429
+        raise requests.HTTPError("quota", response=response)
+
+    _stub_transport(monkeypatch, always_quota)
+    assert L.compose("q?", ["note"], models=["m1"], api_keys=["K"]) is None
+    assert (tmp_path / "health.json").exists()
+    L._COOLDOWNS.clear()
+    L.configure_health(str(tmp_path / "health.json"))  # fresh process, same file
+    calls: list[str] = []
+    _stub_transport(monkeypatch, lambda *a, **k: calls.append(1) or _ok_response("x"))
+    assert L.compose("q?", ["note"], models=["m1"], api_keys=["K"]) is None
+    assert calls == []
+
+
+def test_last_working_combo_goes_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    _stub_transport(monkeypatch, lambda url, **k: calls.append(url) or _ok_response("ok"))
+    assert L.compose("q?", ["note"], models=["m1", "m2"], api_keys=["K"]) == "ok"
+    L._LAST_OK[L._cool_key("K", "m2")] = 9999999999.0
+    L.compose("q?", ["note"], models=["m1", "m2"], api_keys=["K"])
+    assert "m2" in calls[-1] and "m1" not in calls[-1]
 
 
 def test_extract_pdf_notes_parses_lines(monkeypatch: pytest.MonkeyPatch) -> None:

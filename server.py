@@ -8,6 +8,7 @@ then open http://127.0.0.1:8000 in a browser.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -17,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -33,7 +34,7 @@ from remo.log import get_logger
 from remo.memory import Memory, User
 from remo.paths import data_dir
 from remo import reminders as reminders_mod
-from remo.stt import transcribe_file_rest, transcribe_pcm
+from remo.stt import LiveSession, transcribe_file_rest, transcribe_pcm
 from remo.tts import synthesize
 
 ROOT = Path(__file__).resolve().parent
@@ -139,7 +140,7 @@ def index() -> FileResponse:
     return FileResponse(ROOT / "landing" / "landing.html")
 
 
-def _session_user(request: Request, mem: Memory) -> User | None:
+def _session_user(request: Request | WebSocket, mem: Memory) -> User | None:
     token = request.cookies.get(auth_mod.SESSION_COOKIE, "")
     if not token:
         return None
@@ -375,6 +376,108 @@ def turn_audio(
         ))
     result = _route_text(mem, transcript, pending_obj, settings, voice_out)
     return JSONResponse(_turn_payload(result, transcript=transcript))
+
+
+@app.websocket("/api/turn/audio-stream")
+async def turn_audio_stream(websocket: WebSocket) -> None:
+    """Live mic loop: PCM frames stream up during recording; the reply is text-first.
+
+    Query params: lang, pending (JSON). The client sends binary 16-bit mono PCM
+    (16 kHz, any chunk size), then {"type": "end"}. The server forwards live
+    partials as {"type": "partial", "text"} and finishes with {"type": "result",
+    ...turn payload..., "transcript": ...}. Voice is always fetched separately
+    via /api/speak so text never waits for synthesis.
+    """
+    await websocket.accept()
+    mem = Memory(get_db_path())
+    try:
+        if _session_user(websocket, mem) is None:
+            await websocket.close(code=4401)
+            return
+        params = websocket.query_params
+        try:
+            settings = _settings_for(params.get("lang"))
+            pending_obj = json.loads(params.get("pending") or "{}") or None
+        except (HTTPException, json.JSONDecodeError):
+            await websocket.send_json({"type": "error", "message": "bad lang or pending param"})
+            await websocket.close()
+            return
+        boost_words = boost_mod.build_boost_list(mem)
+        partials: asyncio.Queue[str] = asyncio.Queue()
+
+        def on_segment(segment) -> None:
+            partials.put_nowait(segment.text)
+
+        try:
+            live = LiveSession(settings=settings, boost_words=boost_words, on_segment=on_segment)
+        except RuntimeError as exc:
+            await websocket.send_json({"type": "error", "message": str(exc)[:200]})
+            await websocket.close()
+            return
+
+        async def forward_partials() -> None:
+            while True:
+                text = await partials.get()
+                await websocket.send_json({"type": "partial", "text": text})
+
+        forwarder = asyncio.create_task(forward_partials())
+        try:
+            async with live:
+                while True:
+                    try:
+                        message = await websocket.receive()
+                    except WebSocketDisconnect:
+                        return
+                    if message.get("bytes") is not None:
+                        await live.send(message["bytes"])
+                    elif message.get("text") is not None:
+                        try:
+                            data = json.loads(message["text"])
+                        except json.JSONDecodeError:
+                            continue
+                        if data.get("type") == "end":
+                            break
+                    else:
+                        return
+                heard = await live.finish()
+        except WebSocketDisconnect:
+            return
+        except Exception as exc:  # noqa: BLE001 - stream failures become a clean error frame
+            log.warning("streaming turn failed: %s", exc)
+            await websocket.send_json({"type": "error", "message": "transcription failed, tap to retry"})
+            await websocket.close()
+            return
+        finally:
+            forwarder.cancel()
+            try:
+                await forwarder
+            except asyncio.CancelledError:
+                pass
+        transcript, _ = boost_mod.apply_fix_rules(heard.text, mem.get_fix_rules())
+        if not transcript.strip():
+            from remo import lang as lang_mod
+
+            payload = _turn_payload(turn_mod.TurnResult(
+                text=lang_mod.strings(settings.language)["prompt_repeat"],
+                audio=None, action="repeat"))
+            payload["transcript"] = ""
+            await websocket.send_json({"type": "result", **payload})
+            await websocket.close()
+            return
+        try:
+            result = await asyncio.to_thread(
+                _route_text, mem, transcript, pending_obj, settings, False
+            )
+        except Exception as exc:  # noqa: BLE001 - turn failures become a clean error frame
+            log.warning("streamed turn routing failed: %s", exc)
+            await websocket.send_json({"type": "error", "message": "could not answer, tap to retry"})
+            await websocket.close()
+            return
+        payload = _turn_payload(result, transcript=transcript)
+        await websocket.send_json({"type": "result", **payload})
+        await websocket.close()
+    finally:
+        mem.close()
 
 
 def _wav_to_pcm16(raw: bytes) -> bytes | None:
