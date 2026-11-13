@@ -220,8 +220,16 @@ def _recall_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: 
             if entry is None:
                 return _speak(s["no_work_record"], "left_off", settings, speak)
             return _speak(worklog_mod.compose_entry(entry, s=s), "left_off", settings, speak)
-        extra = [p for e in mem.list_work_entries(limit=10) for p in e.pending[:3]]
-        say = recall_mod.compose_left_off(mem.list_recent(20), s=s, extra=extra)
+        notes = mem.list_recent(20)
+        tasks = [p for e in mem.list_work_entries(limit=10) for p in e.pending[:3]]
+        now = datetime.now()
+        rems = [
+            f"{r.text} ({reminders_mod.format_readback(datetime.fromtimestamp(r.fire_at), now)})"
+            for r in mem.list_armed()[:5]
+        ]
+        say = llm_mod.try_left_off(notes, tasks, rems, settings)
+        if say is None:
+            say = recall_mod.compose_left_off(notes, s=s, tasks=tasks, reminders=rems)
         return _speak(say, "left_off", settings, speak)
 
     hits = recall_mod.hybrid_search(mem, text, limit=3)

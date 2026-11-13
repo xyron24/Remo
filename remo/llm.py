@@ -220,6 +220,55 @@ def compose_briefing(pending: list[str], changes: list[str], *, lang: str = "hi"
     return text[:MAX_CHARS].rstrip()
 
 
+_LEFT_OFF_SYSTEM = (
+    "You speak a 'what is left' answer for a voice assistant. State what is pending from the "
+    "memories first, then remaining tasks with their count, then armed reminders with their "
+    "count. Reply in {lang}: short spoken sentences, warm and direct, no quotes, no lists."
+)
+
+
+def compose_left_off_full(pending_notes: list[str], tasks: list[str], rems: list[str], *,
+                          lang: str = "hi", model: str = "",
+                          models: list[str] | None = None, api_key: str = "",
+                          api_keys: list[str] | None = None,
+                          timeout: float = TIMEOUT_SECONDS) -> str | None:
+    """One natural what's-left answer over memories, tasks, and reminders."""
+    keys = api_keys or ([api_key] if api_key else [])
+    if not keys or (not pending_notes and not tasks and not rems):
+        return None
+    lines = ["Pending memories:"]
+    lines += [f"- {p}" for p in pending_notes[:4]]
+    lines += ["Remaining tasks:"]
+    lines += [f"- {t}" for t in tasks[:4]]
+    lines += ["Armed reminders:"]
+    lines += [f"- {r}" for r in rems[:4]]
+    lines.append("Answer:")
+    text = _generate(
+        [{"text": "\n".join(lines)}],
+        _LEFT_OFF_SYSTEM.format(lang=_LANG_NAME.get(lang, _LANG_NAME["hi"])),
+        models=models or ([model] if model else list(DEFAULT_MODELS)),
+        api_keys=keys, timeout=timeout, max_tokens=400, json_mode=False,
+    )
+    if not text:
+        return None
+    return text[:MAX_CHARS].rstrip()
+
+
+def try_left_off(notes: list[Note], tasks: list[str], rems: list[str],
+                 settings: Settings) -> str | None:
+    """Compose what's-left when a key is configured, else None (template takes over)."""
+    if not settings.gemini_api_keys:
+        return None
+    pending = [n.text for n in notes if recall_mod.is_pending_note(n)][:4]
+    if not pending and not tasks and not rems:
+        return None
+    return compose_left_off_full(
+        pending, [t for t in tasks if t.strip()][:4], [r for r in rems if r.strip()][:4],
+        lang=lang_mod.lang_key(settings.language),
+        models=list(settings.gemini_models), api_keys=list(settings.gemini_api_keys),
+    )
+
+
 def try_briefing(entries: list[WorkEntry], deltas: list[tuple[WatchedItem, list[Change]]],
                  settings: Settings) -> str | None:
     """Brief when a key is configured and there is anything to say, else None."""

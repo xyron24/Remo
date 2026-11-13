@@ -167,6 +167,34 @@ def test_compose_briefing_lists_work_then_changes(monkeypatch: pytest.MonkeyPatc
     assert L.compose_briefing([], [], api_key="g-test") is None
 
 
+def test_compose_left_off_full_combines_sections(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict = {}
+
+    def fake_post(url: str, json: dict | None = None, timeout: float = 0):
+        seen["body"] = json
+        return _ok_response("Ye bacha hai: differential. Aur 1 task aur 1 reminder bhi hai.")
+
+    monkeypatch.setattr("remo.llm.requests.post", fake_post)
+    out = L.compose_left_off_full(["differential baaki hai"], ["docs likhna hai"], ["chai (5 baje)"],
+                                  api_key="g-test")
+    assert out is not None and "differential" in out
+    blob = str(seen["body"])
+    assert "docs likhna hai" in blob and "chai (5 baje)" in blob
+    assert L.compose_left_off_full([], [], [], api_key="g-test") is None
+    assert L.compose_left_off_full(["x"], [], [], api_key="") is None
+
+
+def test_try_left_off_wires_keys_and_models(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("remo.llm.requests.post", lambda *a, **k: _ok_response("Sab baaki hai."))
+    mem = Memory(tmp_path / "remo.db")
+    note = mem.add_note("differential baaki hai")
+    out = L.try_left_off([note], ["docs"], ["chai (5 baje)"],
+                         Settings(gemini_api_keys=("k1", "k2")))
+    assert out == "Sab baaki hai."
+    assert L.try_left_off([note], [], [], Settings()) is None
+    mem.close()
+
+
 def test_try_compose_dead_end_without_key(tmp_path: Path) -> None:
     mem = Memory(tmp_path / "remo.db")
     note = mem.add_note("kal kirana se atta lena hai")

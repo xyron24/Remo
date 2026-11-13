@@ -177,25 +177,46 @@ def _short(text: str, limit: int = _MAX_READ) -> str:
     return text if len(text) <= limit else text[:limit].rstrip() + "…"
 
 
+def _deduped(items: list[str], shown: list[str]) -> list[str]:
+    """Items that do not already appear among the shown ones (either direction)."""
+    out: list[str] = []
+    for item in items:
+        low = item.strip().lower()
+        if low and not any(low in s.lower() or s.lower() in low for s in shown + out):
+            out.append(_short(item))
+    return out
+
+
+def is_pending_note(note: Note) -> bool:
+    """True when a note reads as unfinished business."""
+    return _PENDING_PAT.search(f"{note.text} {note.text_latin}") is not None
+
+
 def compose_left_off(notes: list[Note], s: dict | None = None,
-                     extra: list[str] | None = None) -> str:
-    """Pending-first briefing over recent notes plus extra to-dos (e.g. work entries)."""
+                     tasks: list[str] | None = None,
+                     reminders: list[str] | None = None) -> str:
+    """Pending-first briefing: memories, then tasks, then reminders."""
     s = s or lang_mod.HI
     pending = [n for n in notes if _PENDING_PAT.search(f"{n.text} {n.text_latin}")]
-    shown = [_short(n.text) for n in pending[:3]]
-    if extra:
-        for item in extra:
-            low = item.strip().lower()
-            if low and not any(low in s.lower() or s.lower() in low for s in shown):
-                shown.append(_short(item))
-    if shown:
-        items = "; ".join(shown[:4])
-        tail_count = (len(notes) - len(pending)) + max(0, len(shown) - 4)
+    shown_notes = [_short(n.text) for n in pending[:3]]
+    shown_tasks = _deduped(list(tasks or []), shown_notes)[:3]
+    shown_rems = [_short(r) for r in (reminders or []) if r.strip()][:4]
+    parts: list[str] = []
+    if shown_notes:
+        tail_count = len(notes) - len(pending)
         tail = s["left_off_extra"].format(n=tail_count) if tail_count > 0 else ""
-        return s["left_off_pending"].format(items=items) + tail
-    if not notes:
-        return s["left_off_none"]
-    return s["left_off_all_done"].format(latest=_short(notes[0].text))
+        parts.append(s["left_off_pending"].format(items="; ".join(shown_notes)) + tail)
+    if shown_tasks:
+        key = "left_off_tasks_one" if len(shown_tasks) == 1 else "left_off_tasks_many"
+        parts.append(s[key].format(n=len(shown_tasks), items="; ".join(shown_tasks)))
+    if shown_rems:
+        key = "left_off_rems_one" if len(shown_rems) == 1 else "left_off_rems_many"
+        parts.append(s[key].format(n=len(shown_rems), items="; ".join(shown_rems)))
+    if not parts:
+        if not notes:
+            return s["left_off_none"]
+        return s["left_off_all_done"].format(latest=_short(notes[0].text))
+    return " ".join(parts)
 
 
 def compose_recall(notes: list[Note], s: dict | None = None) -> str:

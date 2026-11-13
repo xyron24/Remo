@@ -274,6 +274,34 @@ def test_left_off_unions_work_pending_without_dupes(mem: Memory) -> None:
     assert result.text.count("server deploy karna baaki hai") == 1
 
 
+def test_left_off_lists_notes_tasks_and_reminders(mem: Memory) -> None:
+    import time as _time
+
+    _run("yaad rakhna maths mein integration ho gaya, differential baaki hai", mem)
+    mem.upsert_work_entry("student", "Mifos", "214", [], ["docs likhna hai"])
+    mem.add_reminder("chai dekhna", _time.time() + 3600)
+    result = _run("kya bacha hai?", mem)
+    assert result.action == "left_off"
+    assert "differential" in result.text
+    assert "1 task bacha hai" in result.text and "docs likhna hai" in result.text
+    assert "1 reminder laga hai" in result.text and "chai dekhna" in result.text
+
+
+def test_left_off_prefers_llm_when_key_set(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from remo import llm as llm_mod
+    from remo import turn as turn_mod
+
+    _run("yaad rakhna maths mein integration ho gaya, differential baaki hai", mem)
+    monkeypatch.setattr(llm_mod, "try_intent", lambda *a, **k: None)
+    monkeypatch.setattr(
+        llm_mod, "try_left_off", lambda *a, **k: "Differential abhi baaki hai, bas."
+    )
+    settings = Settings(gnani_api_key="test-key", gemini_api_keys=("g-test",))
+    result = turn_mod.handle_text("kya bacha hai?", mem=mem, settings=settings, speak=False)
+    assert result.action == "left_off"
+    assert result.text == "Differential abhi baaki hai, bas."
+
+
 def test_recall_answers_each_question_from_its_own_note(mem: Memory) -> None:
     _run("yaad rakhna live server check ho gaya", mem)
     _run("yaad rakhna differential equations baaki hai", mem)

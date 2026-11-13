@@ -92,6 +92,29 @@ def test_left_off_empty_memory(tmp_path: Path) -> None:
     mem.close()
 
 
+def test_left_off_combines_notes_tasks_reminders(mem: Memory) -> None:
+    say = R.compose_left_off(
+        mem.list_recent(20),
+        tasks=["deploy karna hai"],
+        reminders=["chai dekhna (aaj shaam 5 baje)", "dawai lena (kal subah)"],
+    )
+    assert "differential" in say
+    assert "1 task bacha hai" in say and "deploy karna hai" in say
+    assert "2 reminders lage hain" in say and "chai dekhna" in say
+
+
+def test_left_off_drops_duplicate_tasks(mem: Memory) -> None:
+    say = R.compose_left_off(mem.list_recent(20), tasks=["differential equations baaki hai"])
+    assert say.count("differential equations baaki hai") == 1
+
+
+def test_left_off_tasks_only_when_notes_empty(tmp_path: Path) -> None:
+    mem = Memory(tmp_path / "remo.db")
+    say = R.compose_left_off([], tasks=["deploy karna hai", "docs likhna hai"])
+    assert "2 tasks bache hain" in say
+    mem.close()
+
+
 def test_recall_compose_with_and_without_hits(mem: Memory) -> None:
     assert "differential" in R.compose_recall(R.hybrid_search(mem, "differential"))
     assert "yaad nahi" in R.compose_recall([])
