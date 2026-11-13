@@ -119,7 +119,7 @@ def _llm_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: dic
         return check_updates(mem=mem, settings=settings, speak=speak)
     if _marker_hit(text, _WELCOME_MARKERS, "welcome"):
         return _welcome_turn(mem=mem, settings=settings, speak=speak, s=s)
-    parsed = llm_mod.try_intent(text, settings)
+    parsed = llm_mod.try_intent(text, mem, settings)
     if not parsed:
         return None
     kind = parsed.get("intent", "other")
@@ -131,6 +131,9 @@ def _llm_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: dic
         return _save_content(content, mem, settings, speak, s, warm=True)
 
     if kind == "recall":
+        reply = (parsed.get("reply") or "").strip()
+        if reply:
+            return _speak(reply[:600], "recall", settings, speak)
         query = (parsed.get("query") or "").strip() or text
         result = _recall_turn(query, mem=mem, settings=settings, speak=speak, s=s)
         return result if result.action != "help" else None

@@ -9,8 +9,11 @@ sent, never the whole memory.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
+import threading
+import time
 
 import requests
 
@@ -31,8 +34,14 @@ _URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generate
 
 _LANG_NAME = {"hi": "Hinglish (Hindi-English mix, Devanagari script is fine)", "mr": "Marathi"}
 
+_PERSONA = (
+    "You are Remo, a male assistant. Always use masculine Hindi grammar about yourself "
+    "(kar sakta hoon, gaya tha, dunga, karunga), never feminine forms. "
+)
+
 _SYSTEM = (
-    "You answer questions about the user's own notes. Use ONLY the notes below. "
+    _PERSONA
+    + "You answer questions about the user's own notes. Use ONLY the notes below. "
     "Answer from them as far as they go; if something is missing, first say what "
     "the notes do say, then add what is missing in one short sentence. "
     "Reply in {lang}: 2-3 short spoken sentences, no quotes, no lists, "
@@ -79,7 +88,8 @@ def compose(
 INTENTS = ("save", "recall", "forget", "remind", "quiz", "briefing", "add_task", "other")
 
 _INTENT_SYSTEM = (
-    "You route one voice-assistant transcript to an intent. The user speaks Hinglish, English, "
+    _PERSONA
+    + "You route one voice-assistant transcript to an intent. The user speaks Hinglish, English, "
     "Marathi, or Hindi, in Latin or Devanagari script. Reply with JSON ONLY, no other text: "
     '{"intent": "<one of save, recall, forget, remind, quiz, briefing, add_task, other>", ...slots}. '
     "save: the user wants to store information for later, in any phrasing "
@@ -96,6 +106,9 @@ _INTENT_SYSTEM = (
     "briefing: the user wants a plan, briefing, or catch-up (plan, welcome back, briefing, ...). "
     "add_task: the user wants to add a to-do task (add task, ...). Put the task in "
     '"task_text". '
+    "For recall, also fill \"reply\" with the FULL user-facing answer composed from the context "
+    "below (2-4 short spoken sentences in the user's language, no quotes, no lists); leave it "
+    "empty only when the context cannot answer the question. "
     "other: greetings, chit-chat, or anything else. Put a short reply in "
     '"reply", 1-2 sentences in the user\'s language. NEVER invent memories, notes, tasks, or '
     "appointments; if asked about those, say you do not remember any."
@@ -122,11 +135,46 @@ def _thinking_cap(model: str) -> dict | None:
     return None
 
 
+_tls = threading.local()
+_COOLDOWNS: dict[tuple[str, str], float] = {}
+_RETRY_RE = re.compile(r"retry in ([\d.]+)s", re.IGNORECASE)
+
+
+def _http() -> requests.Session:
+    """One keep-alive session per thread: no fresh TLS handshake per call."""
+    sess = getattr(_tls, "session", None)
+    if sess is None:
+        sess = requests.Session()
+        _tls.session = sess
+    return sess
+
+
+def _cool_key(key: str, model: str) -> tuple[str, str]:
+    return (hashlib.sha256(key.encode()).hexdigest()[:16], model)
+
+
+def _cooldown_seconds(exc: Exception) -> float:
+    match = _RETRY_RE.search(str(exc))
+    if match:
+        try:
+            return min(float(match.group(1)) + 1.0, 300.0)
+        except ValueError:
+            pass
+    return 60.0
+
+
 def _generate(parts: list[dict], system: str, *, models: list[str], api_keys: list[str],
               timeout: float, max_tokens: int, json_mode: bool) -> str | None:
-    """Try each key, and each model per key; quota/server/timeout moves along."""
+    """Try each key, and each model per key; quota/server/timeout moves along.
+
+    Quota-dead combinations cool down, so a later call skips them instead of
+    burning seconds re-proving it; when everything is cooling, fail fast.
+    """
+    http = _http()
     for key in api_keys:
         for model in models:
+            if time.time() < _COOLDOWNS.get(_cool_key(key, model), 0):
+                continue
             generation_config: dict = {"temperature": 0.2 if not json_mode else 0.0,
                                        "maxOutputTokens": max_tokens}
             cap = _thinking_cap(model)
@@ -140,8 +188,8 @@ def _generate(parts: list[dict], system: str, *, models: list[str], api_keys: li
                 "generationConfig": generation_config,
             }
             try:
-                resp = requests.post(f"{_URL.format(model=model)}?key={key}", json=body,
-                                     timeout=timeout)
+                resp = http.post(f"{_URL.format(model=model)}?key={key}", json=body,
+                                 timeout=timeout)
                 resp.raise_for_status()
                 out = resp.json()["candidates"][0]["content"]["parts"]
                 text = "".join(part.get("text", "") for part in out).strip()
@@ -151,10 +199,12 @@ def _generate(parts: list[dict], system: str, *, models: list[str], api_keys: li
                 if status == 403:
                     break  # bad key: other models on it will fail the same way
                 if status in _RETRYABLE:
+                    _COOLDOWNS[_cool_key(key, model)] = time.time() + _cooldown_seconds(exc)
                     continue
                 return None
             except (requests.Timeout, requests.ConnectionError) as exc:
                 log.debug("model %s unreachable: %s", model, exc)
+                _COOLDOWNS[_cool_key(key, model)] = time.time() + 60.0
                 continue
             except Exception as exc:  # noqa: BLE001 - malformed reply: try the next model
                 log.debug("model %s gave a bad reply: %s", model, exc)
@@ -164,16 +214,20 @@ def _generate(parts: list[dict], system: str, *, models: list[str], api_keys: li
     return None
 
 
-def parse_intent(transcript: str, *, model: str = "", models: list[str] | None = None,
-                 api_key: str = "", api_keys: list[str] | None = None,
+def parse_intent(transcript: str, *, context: str = "", model: str = "",
+                 models: list[str] | None = None, api_key: str = "",
+                 api_keys: list[str] | None = None,
                  timeout: float = TIMEOUT_SECONDS) -> dict | None:
     """One transcript into {intent, slots}, or None when unparseable/failed."""
     keys = api_keys or ([api_key] if api_key else [])
     if not keys or not transcript.strip():
         return None
-    raw = _generate([{"text": f"Transcript: {transcript.strip()}"}], _INTENT_SYSTEM,
+    prompt = f"Transcript: {transcript.strip()}"
+    if context.strip():
+        prompt += f"\nContext (memories, tasks, reminders):\n{context.strip()}"
+    raw = _generate([{"text": prompt}], _INTENT_SYSTEM,
                     models=models or ([model] if model else list(DEFAULT_MODELS)),
-                    api_keys=keys, timeout=timeout, max_tokens=300, json_mode=True)
+                    api_keys=keys, timeout=timeout, max_tokens=400, json_mode=True)
     if raw is None:
         return None
     parsed = _parse_json_object(raw)
@@ -182,15 +236,37 @@ def parse_intent(transcript: str, *, model: str = "", models: list[str] | None =
     return parsed
 
 
-def try_intent(text: str, settings: Settings) -> dict | None:
+def recall_context(mem: Memory, text: str) -> str:
+    """Local retrieval first: recent + matching notes, tasks, reminders."""
+    seen: set[int] = set()
+    notes: list[str] = []
+    for note in mem.list_recent(3) + recall_mod.hybrid_search(mem, text, limit=3):
+        if note.id not in seen:
+            seen.add(note.id)
+            notes.append(note.text[:120])
+    tasks = [p[:100] for e in mem.list_work_entries(limit=5) for p in e.pending[:2]]
+    rems = [r.text[:100] for r in mem.list_armed()[:3]]
+    lines = ["Recent/matching memories:"]
+    lines += [f"- {n}" for n in notes[:6]] or ["- (none)"]
+    lines += ["Open tasks:"]
+    lines += [f"- {t}" for t in tasks[:5]] or ["- (none)"]
+    lines += ["Armed reminders:"]
+    lines += [f"- {r}" for r in rems[:3]] or ["- (none)"]
+    return "\n".join(lines)
+
+
+def try_intent(text: str, mem: Memory, settings: Settings) -> dict | None:
     """Parse when a key is configured, else None (patterns take over)."""
     if not settings.gemini_api_keys:
         return None
-    return parse_intent(text, models=list(settings.gemini_models), api_keys=list(settings.gemini_api_keys))
+    return parse_intent(text, context=recall_context(mem, text),
+                        models=list(settings.gemini_models),
+                        api_keys=list(settings.gemini_api_keys))
 
 
 _BRIEF_SYSTEM = (
-    "You speak a welcome-back briefing for a voice assistant. Pending work first, then what is "
+    _PERSONA
+    + "You speak a welcome-back briefing for a voice assistant. Pending work first, then what is "
     "new out there. Reply in {lang}: 3-5 short spoken sentences, warm and direct, no quotes, "
     "no lists, no URLs (links travel separately, never speak them)."
 )
@@ -221,7 +297,8 @@ def compose_briefing(pending: list[str], changes: list[str], *, lang: str = "hi"
 
 
 _LEFT_OFF_SYSTEM = (
-    "You speak a 'what is left' answer for a voice assistant. State what is pending from the "
+    _PERSONA
+    + "You speak a 'what is left' answer for a voice assistant. State what is pending from the "
     "memories first, then remaining tasks with their count, then armed reminders with their "
     "count. Reply in {lang}: short spoken sentences, warm and direct, no quotes, no lists."
 )

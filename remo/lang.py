@@ -40,7 +40,7 @@ HI = {
     "left_off_all_done": "Kuch baaki nahi dikh raha. Aakhri baat thi: {latest}.",
     "recall_none": "Is baare mein mujhe kuch yaad nahi hai.",
     "recall_found": "Mujhe ye mila: {items}",
-    "auto_remind": "Yaad kar liya, aur {span} aapko yaad dila dungi.",
+    "auto_remind": "Yaad kar liya, aur {span} aapko yaad dila dunga.",
     "answer_said": "Aapne kaha tha: '{task}'.",
     "answer_due": "Ye {span} karna hai.",
     "answer_reminded": " Maine yaad dilane ka reminder laga diya hai.",

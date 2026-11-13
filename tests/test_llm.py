@@ -23,6 +23,25 @@ def _ok_response(text: str) -> FakeResponse:
     return FakeResponse({"candidates": [{"content": {"parts": [{"text": text}]}}]})
 
 
+class _FakeSession:
+    def __init__(self, post) -> None:
+        self._post = post
+
+    def post(self, *args, **kwargs):
+        return self._post(*args, **kwargs)
+
+
+def _stub_transport(monkeypatch: pytest.MonkeyPatch, post) -> None:
+    monkeypatch.setattr("remo.llm._http", lambda: _FakeSession(post))
+
+
+@pytest.fixture(autouse=True)
+def _fresh_cooldowns():
+    L._COOLDOWNS.clear()
+    yield
+    L._COOLDOWNS.clear()
+
+
 def test_compose_returns_grounded_text_and_sends_notes(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict = {}
 
@@ -31,7 +50,7 @@ def test_compose_returns_grounded_text_and_sends_notes(monkeypatch: pytest.Monke
         seen["body"] = json
         return _ok_response("Kal kirana se atta lena hai.")
 
-    monkeypatch.setattr("remo.llm.requests.post", fake_post)
+    _stub_transport(monkeypatch, fake_post)
     out = L.compose(
         "kal kya lena hai?",
         ["kal kirana se atta aur dal lena hai"],
@@ -48,7 +67,7 @@ def test_compose_returns_grounded_text_and_sends_notes(monkeypatch: pytest.Monke
 def test_compose_malformed_payload_returns_none(
     monkeypatch: pytest.MonkeyPatch, payload: dict
 ) -> None:
-    monkeypatch.setattr("remo.llm.requests.post", lambda *a, **k: FakeResponse(payload))
+    _stub_transport(monkeypatch, lambda *a, **k: FakeResponse(payload))
     assert L.compose("q?", ["note"], api_key="g-test") is None
 
 
@@ -56,16 +75,16 @@ def test_compose_failures_return_none(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(*args, **kwargs):
         raise TimeoutError("slow")
 
-    monkeypatch.setattr("remo.llm.requests.post", boom)
+    _stub_transport(monkeypatch, boom)
     assert L.compose("q?", ["note"], api_key="g-test") is None
-    monkeypatch.setattr("remo.llm.requests.post", lambda *a, **k: _ok_response("   "))
+    _stub_transport(monkeypatch, lambda *a, **k: _ok_response("   "))
     assert L.compose("q?", ["note"], api_key="g-test") is None
     assert L.compose("q?", ["note"], api_key="") is None
     assert L.compose("q?", [], api_key="g-test") is None
 
 
 def test_compose_truncates_long_output(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("remo.llm.requests.post", lambda *a, **k: _ok_response("x" * 2000))
+    _stub_transport(monkeypatch, lambda *a, **k: _ok_response("x" * 2000))
     out = L.compose("q?", ["note"], api_key="g-test")
     assert out is not None and len(out) <= L.MAX_CHARS
 
@@ -83,7 +102,7 @@ def test_quota_moves_to_next_model(monkeypatch: pytest.MonkeyPatch) -> None:
             raise requests.HTTPError("quota", response=response)
         return _ok_response("second model answers.")
 
-    monkeypatch.setattr("remo.llm.requests.post", flaky)
+    _stub_transport(monkeypatch, flaky)
     out = L.compose("q?", ["note"], api_key="g-test")
     assert out == "second model answers."
     assert len(calls) == 2 and "3-flash" in calls[1]
@@ -100,7 +119,7 @@ def test_auth_error_does_not_retry(monkeypatch: pytest.MonkeyPatch) -> None:
         response.status_code = 403
         raise requests.HTTPError("denied", response=response)
 
-    monkeypatch.setattr("remo.llm.requests.post", denied)
+    _stub_transport(monkeypatch, denied)
     assert L.compose("q?", ["note"], api_key="bad") is None
     assert len(calls) == 1
 
@@ -118,10 +137,46 @@ def test_dead_key_moves_to_next_key(monkeypatch: pytest.MonkeyPatch) -> None:
             raise requests.HTTPError("quota", response=response)
         return _ok_response("second key answers.")
 
-    monkeypatch.setattr("remo.llm.requests.post", flaky)
+    _stub_transport(monkeypatch, flaky)
     out = L.compose("q?", ["note"], models=["m1"], api_keys=["AAA", "BBB"])
     assert out == "second key answers."
     assert any("key=BBB" in url for url in calls)
+
+
+def test_quota_dead_combo_is_skipped_next_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    import requests
+
+    calls: list[str] = []
+
+    def flaky(url: str, json: dict | None = None, timeout: float = 0):
+        calls.append(url)
+        if "m1" in url:
+            response = requests.Response()
+            response.status_code = 429
+            raise requests.HTTPError("quota, retry in 5s", response=response)
+        return _ok_response("ok")
+
+    _stub_transport(monkeypatch, flaky)
+    assert L.compose("q?", ["note"], models=["m1", "m2"], api_keys=["K"]) == "ok"
+    assert L.compose("q?", ["note"], models=["m1", "m2"], api_keys=["K"]) == "ok"
+    assert len([u for u in calls if "m1" in u]) == 1
+    assert len([u for u in calls if "m2" in u]) == 2
+
+
+def test_all_cooling_fails_fast_without_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    import requests
+
+    def always_quota(url: str, json: dict | None = None, timeout: float = 0):
+        response = requests.Response()
+        response.status_code = 429
+        raise requests.HTTPError("quota", response=response)
+
+    _stub_transport(monkeypatch, always_quota)
+    assert L.compose("q?", ["note"], models=["m1"], api_keys=["K"]) is None
+    calls: list[str] = []
+    _stub_transport(monkeypatch, lambda *a, **k: calls.append(1) or _ok_response("x"))
+    assert L.compose("q?", ["note"], models=["m1"], api_keys=["K"]) is None
+    assert calls == []
 
 
 def test_extract_pdf_notes_parses_lines(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -131,7 +186,7 @@ def test_extract_pdf_notes_parses_lines(monkeypatch: pytest.MonkeyPatch) -> None
         seen["body"] = json
         return _ok_response("1. Integration is area under a curve\n- Differential is slope\n\nPhotosynthesis needs sun.")
 
-    monkeypatch.setattr("remo.llm.requests.post", fake_post)
+    _stub_transport(monkeypatch, fake_post)
     notes = L.extract_pdf_notes(b"%PDF-fake", filename="maths.pdf", api_key="g-test")
     assert notes == ["Integration is area under a curve", "Differential is slope", "Photosynthesis needs sun."]
     parts = seen["body"]["contents"][0]["parts"]
@@ -139,7 +194,7 @@ def test_extract_pdf_notes_parses_lines(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_extract_pdf_notes_caps_and_failures(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("remo.llm.requests.post", lambda *a, **k: _ok_response("\n".join(f"n{i}" for i in range(30))))
+    _stub_transport(monkeypatch, lambda *a, **k: _ok_response("\n".join(f"n{i}" for i in range(30))))
     notes = L.extract_pdf_notes(b"%PDF-fake", api_key="g-test")
     assert notes is not None and len(notes) == 12
     assert L.extract_pdf_notes(b"", api_key="g-test") is None
@@ -148,7 +203,7 @@ def test_extract_pdf_notes_caps_and_failures(monkeypatch: pytest.MonkeyPatch) ->
     def boom(*args, **kwargs):
         raise TimeoutError("slow")
 
-    monkeypatch.setattr("remo.llm.requests.post", boom)
+    _stub_transport(monkeypatch, boom)
     assert L.extract_pdf_notes(b"%PDF-fake", api_key="g-test") is None
 
 
@@ -159,7 +214,7 @@ def test_compose_briefing_lists_work_then_changes(monkeypatch: pytest.MonkeyPatc
         seen["body"] = json
         return _ok_response("Docs baaki hai, aur ek naya comment aaya.")
 
-    monkeypatch.setattr("remo.llm.requests.post", fake_post)
+    _stub_transport(monkeypatch, fake_post)
     out = L.compose_briefing(["docs baaki hai"], ["Naya comment aaya."], api_key="g-test")
     assert out == "Docs baaki hai, aur ek naya comment aaya."
     blob = str(seen["body"])
@@ -174,7 +229,7 @@ def test_compose_left_off_full_combines_sections(monkeypatch: pytest.MonkeyPatch
         seen["body"] = json
         return _ok_response("Ye bacha hai: differential. Aur 1 task aur 1 reminder bhi hai.")
 
-    monkeypatch.setattr("remo.llm.requests.post", fake_post)
+    _stub_transport(monkeypatch, fake_post)
     out = L.compose_left_off_full(["differential baaki hai"], ["docs likhna hai"], ["chai (5 baje)"],
                                   api_key="g-test")
     assert out is not None and "differential" in out
@@ -185,7 +240,7 @@ def test_compose_left_off_full_combines_sections(monkeypatch: pytest.MonkeyPatch
 
 
 def test_try_left_off_wires_keys_and_models(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("remo.llm.requests.post", lambda *a, **k: _ok_response("Sab baaki hai."))
+    _stub_transport(monkeypatch, lambda *a, **k: _ok_response("Sab baaki hai."))
     mem = Memory(tmp_path / "remo.db")
     note = mem.add_note("differential baaki hai")
     out = L.try_left_off([note], ["docs"], ["chai (5 baje)"],
@@ -203,27 +258,42 @@ def test_try_compose_dead_end_without_key(tmp_path: Path) -> None:
 
 
 def test_parse_intent_reads_slots(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "remo.llm.requests.post",
+    _stub_transport(
+        monkeypatch,
         lambda *a, **k: _ok_response('{"intent": "save", "save_text": "ye sab karna"}'),
     )
     parsed = L.parse_intent("remember, ye sab karna", api_key="g-test")
     assert parsed == {"intent": "save", "save_text": "ye sab karna"}
 
 
+def test_parse_intent_carries_context_and_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict = {}
+
+    def fake_post(url: str, json: dict | None = None, timeout: float = 0):
+        seen["body"] = json
+        return _ok_response('{"intent": "recall", "query": "q", "reply": "Atta lena hai."}')
+
+    _stub_transport(monkeypatch, fake_post)
+    parsed = L.parse_intent("q?", context="Notes:\n- atta lena hai", api_key="g-test")
+    assert parsed is not None and parsed["reply"] == "Atta lena hai."
+    assert "atta lena hai" in str(seen["body"])
+
+
 def test_parse_intent_tolerates_fences_and_rejects_garbage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "remo.llm.requests.post",
+    _stub_transport(
+        monkeypatch,
         lambda *a, **k: _ok_response('```json\n{"intent": "other", "reply": "Namaste!"}\n```'),
     )
     assert L.parse_intent("namaste", api_key="g-test") == {"intent": "other", "reply": "Namaste!"}
-    monkeypatch.setattr("remo.llm.requests.post", lambda *a, **k: _ok_response("not json"))
+    _stub_transport(monkeypatch, lambda *a, **k: _ok_response("not json"))
     assert L.parse_intent("namaste", api_key="g-test") is None
-    monkeypatch.setattr(
-        "remo.llm.requests.post", lambda *a, **k: _ok_response('{"intent": "teleport"}')
+    _stub_transport(
+        monkeypatch, lambda *a, **k: _ok_response('{"intent": "teleport"}')
     )
     assert L.parse_intent("namaste", api_key="g-test") is None
     assert L.parse_intent("namaste", api_key="") is None
-    assert L.try_intent("namaste", Settings()) is None
+    mem = Memory(":memory:")
+    assert L.try_intent("namaste", mem, Settings()) is None
+    mem.close()

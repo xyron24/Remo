@@ -162,6 +162,43 @@ def test_llm_other_speaks_guarded_reply(mem: Memory, monkeypatch: pytest.MonkeyP
     assert result.text == "Namaste! Kaise ho?"
 
 
+def test_llm_recall_uses_single_call_reply(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from remo import llm as llm_mod
+    from remo import turn as turn_mod
+
+    _run("yaad rakhna kal kirana se atta lena hai", mem)
+    monkeypatch.setattr(
+        llm_mod, "try_intent",
+        lambda *a, **k: {"intent": "recall", "query": "kirana?", "reply": "Kal atta lena hai."},
+    )
+
+    def explode(*args, **kwargs):
+        raise AssertionError("no second LLM call when reply is filled")
+
+    monkeypatch.setattr(llm_mod, "try_compose", explode)
+    monkeypatch.setattr(llm_mod, "try_left_off", explode)
+    settings = Settings(gnani_api_key="test-key", gemini_api_keys=("g-test",))
+    result = turn_mod.handle_text("kirana ka kya scene hai?", mem=mem, settings=settings, speak=False)
+    assert result.action == "recall"
+    assert result.text == "Kal atta lena hai."
+
+
+def test_llm_recall_empty_reply_uses_structured_path(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    from remo import llm as llm_mod
+    from remo import turn as turn_mod
+
+    _run("yaad rakhna differential baaki hai", mem)
+    monkeypatch.setattr(
+        llm_mod, "try_intent", lambda *a, **k: {"intent": "recall", "query": "kya bacha hai?"}
+    )
+    monkeypatch.setattr(llm_mod, "try_compose", lambda *a, **k: None)
+    monkeypatch.setattr(llm_mod, "try_left_off", lambda *a, **k: None)
+    settings = Settings(gnani_api_key="test-key", gemini_api_keys=("g-test",))
+    result = turn_mod.handle_text("kya bacha hai?", mem=mem, settings=settings, speak=False)
+    assert result.action == "left_off"
+    assert "differential" in result.text
+
+
 def test_llm_intent_none_uses_patterns(mem: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
     from remo import llm as llm_mod
     from remo import turn as turn_mod

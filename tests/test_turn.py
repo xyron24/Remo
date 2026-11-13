@@ -57,7 +57,7 @@ def test_save_with_spoken_reminder_arms_and_acknowledges(mem: Memory) -> None:
         mem=mem, settings=_settings(), speak=False,
     )
     assert result.action == "saved"
-    assert "2 din baad" in result.text and "yaad dila dungi" in result.text
+    assert "2 din baad" in result.text and "yaad dila dunga" in result.text
     assert len(mem.list_armed()) == 1
 
 
