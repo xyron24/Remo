@@ -19,6 +19,7 @@ import time
 import requests
 
 from remo import lang as lang_mod
+from remo import timeutil as time_mod
 from remo import recall as recall_mod
 from remo.config import Settings
 from remo.log import get_logger
@@ -116,6 +117,7 @@ _INTENT_SYSTEM = (
     "phrasing; leave it empty only when the context cannot answer the question. "
     "other: greetings, chit-chat, or anything else. Put a short reply in "
     '"reply", 1-2 sentences in the user\'s language, second person for the user. '
+    "If asked for the current time or date, answer from the Current time line above. "
     "NEVER invent memories, notes, tasks, or appointments; if asked about those, say you "
     "do not remember any."
 )
@@ -367,7 +369,8 @@ def parse_intent(transcript: str, *, context: str = "", model: str = "",
     keys = api_keys or ([api_key] if api_key else [])
     if not keys or not transcript.strip():
         return None
-    prompt = f"Transcript: {transcript.strip()}"
+    stamp = time_mod.now().strftime("%A %Y-%m-%d %H:%M")
+    prompt = f"Current time: {stamp} ({time_mod.zone().key})\nTranscript: {transcript.strip()}"
     if context.strip():
         prompt += f"\nContext (memories, tasks, reminders):\n{context.strip()}"
     raw = _generate([{"text": prompt}], _INTENT_SYSTEM,

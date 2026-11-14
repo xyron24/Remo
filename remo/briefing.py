@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timedelta
 
 from remo import lang as lang_mod
+from remo import timeutil as time_mod
 from remo import recall as recall_mod
 from remo.brain_keywords import normalize
 from remo.memory import Memory, content_tokens, fold_text
@@ -113,13 +114,13 @@ def _clock(moment: datetime) -> str:
 def compose_plan(mem: Memory, now: datetime | None = None, s: dict | None = None) -> str:
     """Plain-template plan: always works, with or without a reasoning model."""
     s = s or lang_mod.HI
-    now = now or datetime.now()
-    today = [r for r in mem.list_armed() if datetime.fromtimestamp(r.fire_at).date() == now.date()]
+    now = now or time_mod.now()
+    today = [r for r in mem.list_armed() if time_mod.from_ts(r.fire_at).date() == now.date()]
     notes = mem.list_recent(5)
     parts: list[str] = []
     if today:
         items = "; ".join(
-            f"{lang_mod.to_second_person(r.text)} ({_clock(datetime.fromtimestamp(r.fire_at))})"
+            f"{lang_mod.to_second_person(r.text)} ({_clock(time_mod.from_ts(r.fire_at))})"
             for r in today[:5]
         )
         parts.append(s["plan_rems"].format(n=len(today), items=items))
@@ -142,9 +143,9 @@ def compose_day_plan(
     "kal" plus a done verb usually means yesterday anyway.
     """
     s = s or lang_mod.HI
-    now = now or datetime.now()
+    now = now or time_mod.now()
     target = (now + timedelta(days=DAY_OFFSET[day])).date()
-    due = [r for r in mem.list_armed() if datetime.fromtimestamp(r.fire_at).date() == target]
+    due = [r for r in mem.list_armed() if time_mod.from_ts(r.fire_at).date() == target]
     toks = DAY_TOKENS[day]
     notes = [
         n
@@ -154,7 +155,7 @@ def compose_day_plan(
     ]
     items = [lang_mod.to_second_person(recall_mod.task_core(n.text)) for n in notes]
     items += [
-        f"{lang_mod.to_second_person(r.text)} ({_clock(datetime.fromtimestamp(r.fire_at))})"
+        f"{lang_mod.to_second_person(r.text)} ({_clock(time_mod.from_ts(r.fire_at))})"
         for r in due
     ]
     if not items:

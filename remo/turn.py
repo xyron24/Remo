@@ -19,6 +19,7 @@ from remo.answers import parse_yes_no
 from remo import briefing as briefing_mod
 from remo.config import Settings, load_settings
 from remo import lang as lang_mod
+from remo import timeutil as time_mod
 from remo import llm as llm_mod
 from remo.log import get_logger
 from remo.memory import Memory
@@ -254,9 +255,9 @@ def _recall_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: 
             return _speak(worklog_mod.compose_entry(entry, s=s), "left_off", settings, speak)
         notes = mem.list_recent(20)
         tasks = [p for e in mem.list_work_entries(limit=10) for p in e.pending[:3]]
-        now = datetime.now()
+        now = time_mod.now()
         rems = [
-            f"{r.text} ({reminders_mod.format_readback(datetime.fromtimestamp(r.fire_at), now)})"
+            f"{r.text} ({reminders_mod.format_readback(time_mod.from_ts(r.fire_at), now)})"
             for r in mem.list_armed()[:5]
         ]
         say = llm_mod.try_left_off(notes, tasks, rems, settings)
@@ -351,7 +352,7 @@ def _maybe_auto_remind(mem: Memory, content: str) -> str:
     if moment is None:
         return ""
     task, _ = reminders_mod.split_task_time(content)
-    mem.add_reminder((task or content)[:160], moment.timestamp())
+    mem.add_reminder((task or content)[:160], time_mod.epoch(moment))
     return span.strip()
 
 
@@ -366,14 +367,14 @@ def _quiz_topic(text: str) -> str | None:
 
 
 def _remind_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: dict) -> TurnResult:
-    task, moment = reminders_mod.split_task_time(text, datetime.now())
+    task, moment = reminders_mod.split_task_time(text, time_mod.now())
     if moment is None:
         return _speak(s["ask_when"], "help", settings, speak)
     if not task:
-        pending = {"action": "remind_ask", "fire_at": moment.timestamp()}
+        pending = {"action": "remind_ask", "fire_at": time_mod.epoch(moment)}
         return _speak(s["ask_task"], "remind_ask", settings, speak, pending=pending)
-    readback = reminders_mod.format_readback(moment, datetime.now())
-    pending = {"action": "remind", "text": task, "fire_at": moment.timestamp()}
+    readback = reminders_mod.format_readback(moment, time_mod.now())
+    pending = {"action": "remind", "text": task, "fire_at": time_mod.epoch(moment)}
     return _speak(s["remind_confirm"].format(readback=readback, task=lang_mod.to_second_person(task)), "remind_confirm",
                   settings, speak, pending=pending)
 
@@ -389,7 +390,7 @@ def complete_remind_task(
         return _speak(s["ask_task"], "remind_ask", settings, speak, pending=pending)
     fire_at = float((pending or {}).get("fire_at", 0))
     mem.add_reminder(text.strip(), fire_at)
-    readback = reminders_mod.format_readback(datetime.fromtimestamp(fire_at), datetime.now())
+    readback = reminders_mod.format_readback(time_mod.from_ts(fire_at), time_mod.now())
     return _speak(s["remind_armed"].format(readback=readback, task=lang_mod.to_second_person(text.strip())), "reminded", settings, speak)
 
 

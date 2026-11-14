@@ -16,6 +16,7 @@ import wave
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from remo import timeutil as time_mod
 from remo.memory import Memory, Reminder
 
 log = logging.getLogger("reminders")
@@ -259,12 +260,12 @@ def _extract(text: str, now: datetime) -> tuple[list[tuple[int, int]], datetime 
 
 def parse_reminder_time(text: str, now: datetime | None = None) -> datetime | None:
     """Resolve the reminder moment, or None when no time is found."""
-    return _extract(text, now or datetime.now())[1]
+    return _extract(text, now or time_mod.now())[1]
 
 
 def extract_time_mention(text: str, now: datetime | None = None) -> tuple[str, datetime | None]:
     """The time words as said ("2 din baad") plus the resolved moment, if any."""
-    now = now or datetime.now()
+    now = now or time_mod.now()
     spans, moment = _extract(text, now)
     if moment is None:
         return "", None
@@ -274,7 +275,7 @@ def extract_time_mention(text: str, now: datetime | None = None) -> tuple[str, d
 
 def split_task_time(text: str, now: datetime | None = None) -> tuple[str, datetime | None]:
     """Split "kal 9 baje chai yaad dilana" into ("chai", datetime)."""
-    now = now or datetime.now()
+    now = now or time_mod.now()
     spans, moment = _extract(text, now)
     kept = "".join(
         ch for i, ch in enumerate(text) if not any(s <= i < e for s, e in spans)
@@ -287,7 +288,7 @@ def split_task_time(text: str, now: datetime | None = None) -> tuple[str, dateti
 
 def format_readback(moment: datetime, now: datetime | None = None) -> str:
     """"kal subah 9 baje" style read-back for confirmation."""
-    now = now or datetime.now()
+    now = now or time_mod.now()
     delta_days = (moment.date() - now.date()).days
     if delta_days <= 0:
         day = "aaj"

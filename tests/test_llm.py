@@ -344,6 +344,18 @@ def test_parse_intent_carries_context_and_reply(monkeypatch: pytest.MonkeyPatch)
     assert "atta lena hai" in str(seen["body"])
 
 
+def test_parse_intent_carries_current_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict = {}
+
+    def fake_post(url: str, json: dict | None = None, timeout: float = 0):
+        seen["body"] = json
+        return _ok_response('{"intent": "other", "reply": "hi"}')
+
+    _stub_transport(monkeypatch, fake_post)
+    L.parse_intent("time kya hai", api_key="g-test")
+    assert "Current time" in str(seen["body"])
+
+
 def test_parse_intent_tolerates_fences_and_rejects_garbage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

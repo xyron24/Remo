@@ -27,6 +27,7 @@ from remo import auth as auth_mod
 from remo import boost as boost_mod
 from remo import brain_keywords as kw
 from remo import lang as lang_mod
+from remo import timeutil as time_mod
 from remo import llm as llm_mod
 from remo import turn as turn_mod
 from remo.capture.audio import downsample_mono16
@@ -523,7 +524,7 @@ def state(mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
     ]
     alarms = [
         {"id": r.id, "text": r.text, "fire_at": r.fire_at,
-         "when": datetime.fromtimestamp(r.fire_at).strftime("%d %b, %I:%M %p").lstrip("0")}
+         "when": time_mod.from_ts(r.fire_at).strftime("%d %b, %I:%M %p").lstrip("0")}
         for r in mem.list_armed()
     ]
     entries = [
@@ -534,7 +535,7 @@ def state(mem: Memory = Depends(mem_dep)) -> JSONResponse:  # noqa: B008
     watched = [{"id": w.id, "url": w.url, "checked_at": w.last_checked_at} for w in mem.list_watched()]
     fired = [
         {"id": r.id, "text": r.text, "fire_at": r.fire_at,
-         "when": datetime.fromtimestamp(r.fire_at).strftime("%d %b, %I:%M %p").lstrip("0")}
+         "when": time_mod.from_ts(r.fire_at).strftime("%d %b, %I:%M %p").lstrip("0")}
         for r in mem.list_fired()
     ]
     return JSONResponse({

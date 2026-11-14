@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from remo import lang as lang_mod
+from remo import timeutil as time_mod
 from remo import reminders as reminders_mod
 from remo.brain_keywords import normalize
 from remo.memory import Memory, Note, content_tokens, fold_text, fold_word
@@ -236,7 +237,7 @@ def task_core(text: str, limit: int = 160) -> str:
 
 def _has_matching_reminder(mem: Memory, moment) -> bool:
     try:
-        target = moment.timestamp()
+        target = time_mod.epoch(moment)
     except (AttributeError, OSError, OverflowError):
         return False
     return any(abs(r.fire_at - target) < 3600 for r in mem.list_armed())
