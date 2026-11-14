@@ -494,7 +494,7 @@ button[type="submit"]:active, .primary:active { transform: translateY(1px); box-
 .thread:not(.tall):empty { display: none; }
 .thread.tall { min-height: 42vh; max-height: 62vh; }
 #thread-ask:empty::before {
-  content: "Speak or type below — Remo replies aloud in Hinglish or Marathi.";
+  content: "Speak or type below. Remo replies aloud in Hinglish or Marathi.";
   color: var(--muted);
   font-size: 0.9rem;
   align-self: center;

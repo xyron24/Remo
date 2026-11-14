@@ -374,7 +374,7 @@
 
     const meta = document.createElement("span");
     meta.className = "audio-meta";
-    meta.textContent = `Timbre · ${store.voice || SPEAKER_NAME[store.lang] || "Nalini"}`;
+    meta.textContent = `Timbre: ${store.voice || SPEAKER_NAME[store.lang] || "Nalini"}`;
 
     pill.appendChild(btn);
     pill.appendChild(bars);
@@ -696,7 +696,7 @@
   function renderProfileStats(s) {
     const el = $("prof-stats");
     if (!el || !s) return;
-    el.textContent = `${s.notes.length} memories · ${pendingCount(s)} pending · ${s.reminders.length} alarms · ${s.watched.length} watched`;
+    el.textContent = `${s.notes.length} memories, ${pendingCount(s)} pending, ${s.reminders.length} alarms, ${s.watched.length} watched`;
   }
 
   function pendingCount(s) {
@@ -723,8 +723,8 @@
     const act = $("activity");
     act.innerHTML = "";
     const items = [
-      ...s.notes.slice(0, 4).map((n) => ({ text: n.text, meta: `memory · ${fmtTime(n.created_at)}` })),
-      ...s.reminders.slice(0, 3).map((r) => ({ text: r.text, meta: `alarm · ${r.when}` })),
+      ...s.notes.slice(0, 4).map((n) => ({ text: n.text, meta: `memory, ${fmtTime(n.created_at)}` })),
+      ...s.reminders.slice(0, 3).map((r) => ({ text: r.text, meta: `alarm, ${r.when}` })),
       ...s.changes.slice(0, 3).map((c) => ({ text: c.summary, meta: "watcher update" })),
     ].slice(0, 8);
     if (!items.length) act.innerHTML = `<li class="empty">Quiet so far. Click a sample phrase above or tap the mic to begin.</li>`;
@@ -781,7 +781,7 @@
     hits.slice(0, 60).forEach((n) => {
       const li = document.createElement("li");
       li.className = "deletable";
-      li.innerHTML = `${esc(n.text)}<span class="meta">${esc(fmtTime(n.created_at))} · ${esc(n.source || "voice")}</span>`;
+      li.innerHTML = `${esc(n.text)}<span class="meta">${esc(fmtTime(n.created_at))}, ${esc(n.source || "voice")}</span>`;
       li.appendChild(delButton("notes", n.id, "memory"));
       list.appendChild(li);
     });
@@ -798,7 +798,7 @@
       div.className = "panel deletable";
       const pend = w.pending.map((p) => `<li class="pend-item">${esc(p)}</li>`).join("") || `<li class="empty">Nothing pending.</li>`;
       const done = w.done.map((d) => `<li class="done-item">${esc(d)}</li>`).join("") || `<li class="empty">Nothing done yet.</li>`;
-      div.innerHTML = `<h3>${esc(label)} <span class="persona-pill">${esc(w.persona)} · ${w.done.length}/${total} done</span></h3>
+      div.innerHTML = `<h3>${esc(label)} <span class="persona-pill">${esc(w.persona)}, ${w.done.length}/${total} done</span></h3>
         <div class="work-progress" aria-hidden="true"><i style="width:${pct}%"></i></div>
         <ul class="rows">${pend}</ul><ul class="rows" style="margin-top:.55rem">${done}</ul>`;
       div.appendChild(delButton("work", w.id, "work entry"));
@@ -853,7 +853,7 @@
     const rules = learned.fix_rules || [];
     wordsEl.innerHTML = words.length
       ? words.slice(0, 24).map((w) => `<span class="learned-chip">${esc(w)}</span>`).join("")
-      : `<span class="muted small">No custom boost words yet — save a few notes to populate.</span>`;
+      : `<span class="muted small">No custom boost words yet. Save a few notes to populate.</span>`;
     rulesEl.innerHTML = rules.length
       ? `<strong>Fix rules:</strong> ` + rules.map(([a, b]) => `<code>${esc(a)} → ${esc(b)}</code>`).join(" ")
       : "";
@@ -952,7 +952,7 @@
       const i = await API.info();
       store.voice = i.voice || null;
       document.querySelectorAll(".audio-meta").forEach((el) => {
-        el.textContent = `Timbre · ${store.voice}`;
+        el.textContent = `Timbre: ${store.voice}`;
       });
       if (i.voices) {
         if ($("voice-hi")) $("voice-hi").textContent = i.voices["hi-IN"] || "";
@@ -964,7 +964,7 @@
         return name.charAt(0).toUpperCase() + name.slice(1) + (rest.length ? ` ${rest.join("-")}` : "");
       };
       if ($("model-pill") && i.stt_model && i.tts_model) {
-        $("model-pill").textContent = `${pretty(i.stt_model)} · ${pretty(i.tts_model)}`;
+        $("model-pill").textContent = `${pretty(i.stt_model)}, ${pretty(i.tts_model)}`;
       }
       if ($("voice-models-line") && i.stt_model && i.tts_model) {
         $("voice-models-line").textContent =
@@ -1148,7 +1148,7 @@
     if (say && $("v-text")) {
       $("v-text").value = say;
       $("v-text").focus();
-      toast("Phrase loaded — press Enter to run");
+      toast("Phrase loaded. Press Enter to run");
     }
 
     wireOverviewLink();

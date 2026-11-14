@@ -37,7 +37,7 @@ def valid_password(password: str) -> bool:
 
 
 def hash_password(password: str) -> str:
-    """salt$rounds$hex — verifiable with nothing but the stored string."""
+    """salt$rounds$hex, verifiable with nothing but the stored string."""
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _PBKDF2_ROUNDS).hex()
     return f"{salt.hex()}${_PBKDF2_ROUNDS}${digest}"

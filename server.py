@@ -13,6 +13,7 @@ import json
 import os
 import re
 import wave
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -44,7 +45,15 @@ LANGS = ("hi-IN", "mr-IN")
 _AUDIO_NAME = re.compile(r"^[0-9a-f]{40}\.wav$")
 
 log = get_logger("server")
-app = FastAPI(title="Remo")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    log.info("Remo data: db=%s dir=%s", get_db_path(), data_dir())
+    yield
+
+
+app = FastAPI(title="Remo", lifespan=_lifespan)
 app.mount("/static", StaticFiles(directory=ROOT / "web"), name="static")
 app.mount("/landing", StaticFiles(directory=ROOT / "landing", html=True), name="landing")
 
