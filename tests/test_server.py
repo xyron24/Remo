@@ -213,6 +213,21 @@ def test_audio_guard_blocks_traversal(client: TestClient) -> None:
     assert client.get("/api/audio/" + "a" * 40 + ".wav").status_code == 404
 
 
+def test_speak_stream_proxies_pcm_and_validates(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from remo import tts as tts_mod
+
+    assert client.post("/api/speak/stream", json={"text": "  "}).status_code == 400
+    assert client.post("/api/speak/stream", json={"text": "x" * 2001}).status_code == 400
+    monkeypatch.setattr(tts_mod, "synthesize_stream", lambda *a, **k: iter([b"\x01\x02" * 800]))
+    response = client.post("/api/speak/stream", json={"text": "Yaad kar liya."})
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/octet-stream"
+    assert response.headers["X-Audio-Format"] == "pcm16-mono-16000"
+    assert len(response.content) % 2 == 0 and len(response.content) > 0
+
+
 def test_register_login_me_logout_roundtrip(client: TestClient) -> None:
     client.cookies.clear()
     assert client.post("/api/auth/register", json={"email": "bad", "password": "password-1"}).status_code == 400

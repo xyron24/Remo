@@ -107,15 +107,7 @@ def test_poll_all_stores_and_never_raises(tmp_path: Path) -> None:
     mem.close()
 
 
-def test_compose_updates_counts_and_links(tmp_path: Path) -> None:
-    mem = Memory(tmp_path / "remo.db")
-    watched = mem.watch_url("github_issue", "https://github.com/o/r/issues/214")
-    mem.store_changes(watched.id, [
-        ("Pehla badlaav.", "q1", "https://x/1", 1.0),
-        ("Dusra badlaav.", "q2", "https://x/2", 2.0),
-        ("Teesra badlaav.", "q3", "https://x/3", 3.0),
-    ])
-    say, links = W.compose_updates(mem.unbriefed_changes(), "as of 10:00 AM")
-    assert say.startswith("3 badlaav") and "Pehla" in say and "as of" in say
-    assert links == ["https://x/1", "https://x/2", "https://x/3"]
-    mem.close()
+def test_compose_since_check_counts_only() -> None:
+    assert W.compose_since_check(0) == "Koi naya badlaav nahi hai."
+    assert W.compose_since_check(1) == "1 naya badlaav hua hai."
+    assert W.compose_since_check(5) == "5 naye badlaav hue hain."

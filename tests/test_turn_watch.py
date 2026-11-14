@@ -78,9 +78,71 @@ def test_updates_poll_and_brief_with_links(mem: Memory) -> None:
     with mock.patch.object(watcher_mod, "poll_all", fake_poll_all):
         result = _run("koi update aaya?", mem)
     assert result.action == "updates"
-    assert "2 badlaav" in result.text and "as of" in result.text
+    assert result.text == "2 naye badlaav hue hain."
     assert result.links == ["https://x/c1", "https://x/i"]
     assert mem.unbriefed_changes() == [], "briefed once, never repeated"
+
+
+def test_updates_only_since_last_check(mem: Memory) -> None:
+    from unittest import mock
+
+    from remo import watcher as watcher_mod
+
+    watched = mem.watch_url("github_repo", "https://github.com/o/alpha")
+    mem.store_changes(watched.id, [("old%d" % i, "", "", float(i)) for i in range(3)])
+
+    def empty_poll(mem_inner, token="", fetch=None, lang="hi"):
+        return watcher_mod.PollReport(checked=1, new_changes=0, checked_at=1730000000.0)
+
+    def one_new_poll(mem_inner, token="", fetch=None, lang="hi"):
+        item = mem_inner.list_watched()[0]
+        mem_inner.store_changes(item.id, [("Naya.", "", "https://x/n", 9.0)])
+        return watcher_mod.PollReport(checked=1, new_changes=1, checked_at=1730000001.0)
+
+    with mock.patch.object(watcher_mod, "poll_all", empty_poll):
+        first = _run("koi update aaya?", mem)
+    assert first.text == "3 naye badlaav hue hain."
+    with mock.patch.object(watcher_mod, "poll_all", empty_poll):
+        second = _run("koi update aaya?", mem)
+    assert second.text == "Koi naya badlaav nahi hai."
+    with mock.patch.object(watcher_mod, "poll_all", one_new_poll):
+        third = _run("koi update aaya?", mem)
+    assert third.text == "1 naya badlaav hua hai."
+    assert third.links == ["https://x/n"]
+
+
+def test_welcome_briefing_does_not_consume_check_instance(mem: Memory) -> None:
+    from unittest import mock
+
+    from remo import watcher as watcher_mod
+
+    watched = mem.watch_url("github_repo", "https://github.com/o/alpha")
+    mem.store_changes(watched.id, [("c1", "", "", 1.0), ("c2", "", "", 2.0)])
+    _run("welcome back", mem)
+    assert mem.unbriefed_changes() == []
+
+    def empty_poll(mem_inner, token="", fetch=None, lang="hi"):
+        return watcher_mod.PollReport(checked=1, new_changes=0, checked_at=1730000000.0)
+
+    with mock.patch.object(watcher_mod, "poll_all", empty_poll):
+        result = _run("koi update aaya?", mem)
+    assert result.text == "2 naye badlaav hue hain."
+
+
+def test_updates_reports_none_when_nothing_new(mem: Memory) -> None:
+    from unittest import mock
+
+    from remo import watcher as watcher_mod
+
+    mem.watch_url("github_repo", "https://github.com/o/alpha")
+
+    def fake_poll_all(mem_inner, token="", fetch=None, lang="hi"):
+        return watcher_mod.PollReport(checked=1, new_changes=0, checked_at=1730000000.0)
+
+    with mock.patch.object(watcher_mod, "poll_all", fake_poll_all):
+        result = _run("koi update aaya?", mem)
+    assert result.action == "updates"
+    assert result.text == "Koi naya badlaav nahi hai."
 
 
 def test_devanagari_watch_and_update_route(mem: Memory) -> None:
@@ -99,7 +161,7 @@ def test_devanagari_watch_and_update_route(mem: Memory) -> None:
     with mock.patch.object(watcher_mod, "poll_all", fake_poll_all):
         result = _run("कोई अपडेट आया", mem)
     assert result.action == "updates"
-    assert "Naya comment" in result.text
+    assert result.text == "1 naya badlaav hua hai."
     assert result.links == ["https://x/c1"]
     assert mem.unbriefed_changes() == [], "briefed once, never repeated"
 

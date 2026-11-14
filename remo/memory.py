@@ -337,6 +337,11 @@ CREATE TABLE IF NOT EXISTS changes (
     source_link TEXT NOT NULL DEFAULT '',
     briefed INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS check_runs (
+    id INTEGER PRIMARY KEY,
+    checked_at REAL NOT NULL,
+    last_change_id INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT ''
@@ -687,6 +692,33 @@ class Memory:
             "INSERT INTO changes (watched_id, summary, source_quote, source_link, seen_at)"
             " VALUES (?, ?, ?, ?, ?)",
             [(watched_id, s, q, link, at) for s, q, link, at in changes],
+        )
+        self.db.commit()
+
+    def max_change_id(self) -> int:
+        """Highest stored change id, 0 when nothing observed yet."""
+        row = self.db.execute("SELECT COALESCE(MAX(id), 0) AS m FROM changes").fetchone()
+        return row["m"]
+
+    def count_changes_since(self, change_id: int) -> int:
+        """Changes stored after the given change id (after a check instance)."""
+        row = self.db.execute(
+            "SELECT COUNT(*) AS n FROM changes WHERE id > ?", (change_id,)
+        ).fetchone()
+        return row["n"]
+
+    def last_check_id(self) -> int | None:
+        """Change id watermark of the most recent check press, None if never."""
+        row = self.db.execute(
+            "SELECT last_change_id FROM check_runs ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        return row["last_change_id"] if row else None
+
+    def record_check(self, last_change_id: int, checked_at: float) -> None:
+        """Store one check press as an instance other presses compare against."""
+        self.db.execute(
+            "INSERT INTO check_runs (checked_at, last_change_id) VALUES (?, ?)",
+            (checked_at, last_change_id),
         )
         self.db.commit()
 

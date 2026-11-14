@@ -5,8 +5,12 @@ Audio is cached on disk by content hash , repeated phrases cost nothing.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
+import struct
 import threading
+from collections.abc import Iterator
 from pathlib import Path
 
 import requests
@@ -94,3 +98,97 @@ def synthesize(
 def pregenerate(phrases: list[str], **kwargs) -> list[Path]:
     """Warm the cache for fixed phrases (acks, prompts) ahead of time."""
     return [synthesize(phrase, **kwargs) for phrase in phrases]
+
+
+def _wav_header(data_len: int, sample_rate: int = SAMPLE_RATE) -> bytes:
+    header = bytearray(44)
+    header[0:4] = b"RIFF"
+    struct.pack_into("<I", header, 4, 36 + data_len)
+    header[8:12] = b"WAVE"
+    header[12:16] = b"fmt "
+    struct.pack_into("<IHHIIHH", header, 16, 16, 1, 1, sample_rate, sample_rate * 2, 2, 16)
+    header[36:40] = b"data"
+    struct.pack_into("<I", header, 40, data_len)
+    return bytes(header)
+
+
+def _iter_sse_audio(resp) -> Iterator[bytes]:
+    """Yield raw PCM chunks from a Timbre SSE response (base64 `audio` fields)."""
+    for line in resp.iter_lines():
+        if not line:
+            continue
+        text = line.decode("utf-8", "replace") if isinstance(line, bytes) else line
+        if not text.startswith("data:"):
+            continue
+        try:
+            payload = json.loads(text[5:].strip())
+        except ValueError:
+            continue
+        audio = payload.get("audio")
+        if audio:
+            yield base64.b64decode(audio)
+        if payload.get("is_final"):
+            return
+
+
+def _sse_url() -> str:
+    return "https://api.vachana.ai/api/v1/tts/sse"
+
+
+def synthesize_stream(
+    text: str,
+    *,
+    settings: Settings | None = None,
+    speed: float = 1.0,
+    timeout: int = 60,
+) -> Iterator[bytes]:
+    """Yield raw 16-bit mono PCM chunks as Timbre generates them.
+
+    Cache hits replay the stored file progressively; misses proxy the SSE
+    stream and write the assembled WAV to cache on clean completion.
+    Shares cache files with synthesize().
+    """
+    settings = settings or load_settings()
+    api_key = require_api_key(settings)
+    voice = lang_mod.resolve_voice(settings.tts_voice, settings.language)
+    voice_settings = Settings(
+        gnani_api_key=settings.gnani_api_key,
+        tts_model=settings.tts_model,
+        tts_voice=voice,
+        language=settings.language,
+    )
+    cached = data_dir() / "tts_cache" / f"{_cache_key(text, voice_settings, speed)}.wav"
+    if cached.exists():
+        raw = cached.read_bytes()[44:]  # strip the WAV header, keep the PCM
+        for offset in range(0, len(raw), 3200):
+            yield raw[offset : offset + 3200]
+        return
+    assembled = bytearray()
+    with _LOCK:
+        resp = requests.post(
+            _sse_url(),
+            headers={"X-API-Key-ID": api_key, "Content-Type": "application/json"},
+            json={
+                "text": text,
+                "voice": voice,
+                "model": settings.tts_model,
+                "language": settings.language,
+                "speed": speed,
+                "audio_config": {
+                    "sample_rate": SAMPLE_RATE,
+                    "num_channels": 1,
+                    "sample_width": 2,
+                    "encoding": "linear_pcm",
+                    "container": "raw",
+                },
+            },
+            timeout=timeout,
+            stream=True,
+        )
+        resp.raise_for_status()
+        for chunk in _iter_sse_audio(resp):
+            assembled += chunk
+            yield bytes(chunk)
+    if assembled:
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_bytes(_wav_header(len(assembled)) + bytes(assembled))

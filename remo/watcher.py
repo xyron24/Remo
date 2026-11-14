@@ -16,7 +16,7 @@ import requests
 
 from remo import lang as lang_mod
 from remo.log import get_logger
-from remo.memory import Change, Memory, WatchedItem
+from remo.memory import Memory
 
 log = get_logger("watcher")
 
@@ -194,15 +194,11 @@ def poll_all(mem: Memory, token: str = "", fetch=None, lang: str = "hi") -> Poll
     return report
 
 
-def compose_updates(
-    deltas: list[tuple[WatchedItem, list[Change]]], checked_label: str, s: dict | None = None
-) -> tuple[str, list[str]]:
-    """Spoken delta briefing + screen links (quotes stay on screen too)."""
+def compose_since_check(count: int, s: dict | None = None) -> str:
+    """One short line: only what changed after the previous check instance."""
     s = s or lang_mod.HI
-    total = sum(len(changes) for _, changes in deltas)
-    links = [c.source_link for _, changes in deltas for c in changes if c.source_link]
-    if total == 0:
-        return s["updates_none"], []
-    firsts = "; ".join(c.summary for _, changes in deltas for c in changes[:3])
-    extra = s["updates_extra"].format(n=total - 3) if total > 3 else ""
-    return s["updates_some"].format(n=total, label=checked_label, firsts=firsts, extra=extra), links
+    if count == 0:
+        return s["updates_none"]
+    if count == 1:
+        return s["updates_new_one"].format(n=count)
+    return s["updates_new"].format(n=count)

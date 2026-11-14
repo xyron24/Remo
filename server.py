@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -599,6 +599,23 @@ def speak(body: Speak) -> JSONResponse:
         raise HTTPException(status_code=400, detail="empty text")
     audio = synthesize(body.text, settings=settings)
     return JSONResponse({"audio_url": _audio_url(audio)})
+
+
+@app.post("/api/speak/stream", dependencies=[Depends(current_user)])
+def speak_stream(body: Speak) -> StreamingResponse:
+    """Progressive voice-out: raw 16-bit mono PCM at 16 kHz, first sound ASAP."""
+    from remo.tts import SAMPLE_RATE, synthesize_stream
+
+    settings = _settings_for(body.lang)
+    if not body.text.strip():
+        raise HTTPException(status_code=400, detail="empty text")
+    if len(body.text) > 2000:
+        raise HTTPException(status_code=400, detail="text too long (2000 max)")
+    return StreamingResponse(
+        synthesize_stream(body.text, settings=settings),
+        media_type="application/octet-stream",
+        headers={"X-Audio-Format": f"pcm16-mono-{SAMPLE_RATE}"},
+    )
 
 
 @app.get("/api/audio/{name}", dependencies=[Depends(current_user)])

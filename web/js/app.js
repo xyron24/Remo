@@ -13,7 +13,6 @@
   };
   const LANG_NAME = { "hi-IN": "Hinglish", "mr-IN": "Marathi" };
   const SPEAKER_NAME = { "hi-IN": "Nalini", "mr-IN": "Zahira" };
-  const player = new Audio();
   let homeVoice = null;
   let askVoice = null;
 
@@ -57,34 +56,153 @@
       store.activePill = null;
     }
   }
-  function play(url, done, pillEl) {
-    if (!url) { done && done(); return; }
-    if (!pillEl && !store.autoplay) { done && done(); return; }
+  const StreamVoice = (() => {
+    let ctx = null, generation = 0, reader = null, sources = [], active = null;
 
-    // Toggle off if clicking currently playing pill
-    if (pillEl && store.activePill === pillEl && !player.paused) {
-      player.pause();
-      clearActivePill();
-      return;
+    function ensureCtx() {
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        ctx = new AC({ sampleRate: 16000 });
+      }
+      return ctx;
     }
 
-    clearActivePill();
-    if (pillEl) {
-      store.activePill = pillEl;
-      pillEl.classList.add("playing");
-      const useEl = pillEl.querySelector(".audio-play use");
-      if (useEl) useEl.setAttribute("href", "#i-pause");
+    async function readyCtx() {
+      const ac = ensureCtx();
+      if (ac.state !== "running") {
+        try { await ac.resume(); } catch { /* still blocked until a tap */ }
+      }
+      return ac;
     }
 
-    player.src = url;
-    const end = () => {
-      clearActivePill();
-      done && done();
-    };
-    player.onended = end;
-    player.onerror = end;
-    player.play().catch(end);
-  }
+    function prime() {
+      // Run inside a real tap or keypress: unlocks audio before slow replies return.
+      try {
+        const ac = ensureCtx();
+        if (ac.state === "suspended") ac.resume().catch(() => {});
+      } catch { /* no audio on this browser */ }
+    }
+
+    function setIcon(pill, playing) {
+      const useEl = pill && pill.querySelector(".audio-play use");
+      if (useEl) useEl.setAttribute("href", playing ? "#i-pause" : "#i-play");
+    }
+
+    function halt() {
+      generation++;
+      try { reader && reader.cancel(); } catch { /* gone */ }
+      reader = null;
+      sources.forEach((s) => { try { s.stop(); } catch { /* done */ } try { s.disconnect(); } catch { /* gone */ } });
+      sources = [];
+      if (active) { clearActivePill(); active = null; }
+    }
+
+    async function speak(text, pill, done) {
+      halt();
+      const my = generation;
+      const alive = () => my === generation;
+      const finish = (err) => {
+        if (!alive()) return;
+        if (active) { clearActivePill(); active = null; }
+        if (err) toast(`Voice reply failed: ${err}`, true);
+        done && done();
+      };
+      let ac;
+      try {
+        ac = await readyCtx();
+      } catch {
+        finish("audio unavailable");
+        return;
+      }
+      if (ac.state !== "running") {
+        finish("browser blocked audio: tap anywhere once, then retry");
+        return;
+      }
+      if (pill) {
+        store.activePill = pill;
+        active = pill;
+        pill.classList.add("playing");
+        setIcon(pill, true);
+      }
+      let res;
+      try {
+        res = await fetch("/api/speak/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, lang: store.lang }),
+        });
+      } catch {
+        finish("server away");
+        return;
+      }
+      if (!alive()) return;
+      if (res.status === 401) { window.location.href = "/login"; return; }
+      if (!res.ok) {
+        let detail = "";
+        try { detail = (await res.json()).detail || ""; } catch { detail = ""; }
+        finish(detail || `server said ${res.status}`);
+        return;
+      }
+      reader = res.body.getReader();
+      let nextTime = ac.currentTime + 0.05;
+      let carry = null;
+      try {
+        for (;;) {
+          const { done: streamDone, value } = await reader.read();
+          if (!alive()) return;
+          if (streamDone) break;
+          let bytes = value;
+          if (carry) {
+            const joined = new Uint8Array(carry.length + value.length);
+            joined.set(carry, 0);
+            joined.set(value, carry.length);
+            bytes = joined;
+            carry = null;
+          }
+          if (bytes.length % 2) {
+            carry = bytes.slice(-1);
+            bytes = bytes.slice(0, -1);
+          }
+          if (!bytes.length) continue;
+          const frames = bytes.length / 2;
+          const buf = ac.createBuffer(1, frames, 16000);
+          const ch = buf.getChannelData(0);
+          const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+          for (let i = 0; i < frames; i++) ch[i] = dv.getInt16(i * 2, true) / 32768;
+          const src = ac.createBufferSource();
+          src.buffer = buf;
+          src.connect(ac.destination);
+          nextTime = Math.max(nextTime, ac.currentTime + 0.02);
+          src.start(nextTime);
+          nextTime += frames / 16000;
+          sources.push(src);
+        }
+      } catch {
+        finish("stream broke");
+        return;
+      }
+      const last = sources[sources.length - 1];
+      if (last) {
+        await new Promise((resolve) => {
+          last.onended = resolve;
+          setTimeout(resolve, 20000);
+        });
+      }
+      finish();
+    }
+
+    function toggle(pill, text) {
+      if (active === pill) { halt(); return; }
+      speak(text, pill, null);
+    }
+
+    return { speak, toggle, halt, prime };
+  })();
+
+  // Unlock audio on every real gesture, so post-reply playback is never blocked.
+  ["pointerdown", "keydown"].forEach((ev) =>
+    window.addEventListener(ev, () => StreamVoice.prime(), { passive: true })
+  );
 
   /* ---------- router ---------- */
   const PAGES = ["home", "ask", "memories", "work", "reminders", "watchlist", "briefing", "voice", "settings", "profile"];
@@ -106,51 +224,11 @@
 
   /* ---------- threads & inline player ---------- */
   const BAR_HEIGHTS = [38, 65, 90, 52, 78, 96, 62, 44, 84, 72, 48, 88, 66, 36];
-  function splitHead(text) {
-    // Long replies speak the first sentence ASAP, then the rest.
-    if (!text || text.length < 60) return null;
-    const m = text.match(/^(.+?[.!?…।]["'”’]?)(\s+|$)([\s\S]*)$/);
-    if (!m || !m[3].trim() || m[1].length < 15) return null;
-    return [m[1], m[3].trim()];
+  function speakInBackground(text, pill, done) {
+    StreamVoice.speak(text, pill, done);
   }
 
-  function rebindPill(pill, text, url) {
-    if (!pill) return;
-    const btn = pill.querySelector("button");
-    if (!btn) return;
-    btn.onclick = url ? () => play(url, null, pill) : () => speakInBackground(text, pill, null);
-  }
-
-  async function speakInBackground(text, pill, done) {
-    const finish = () => { done && done(); };
-    try {
-      const parts = splitHead(text);
-      if (!parts) {
-        const { audio_url } = await API.speak(text, store.lang);
-        rebindPill(pill, text, audio_url);
-        play(audio_url, finish, pill);
-        return;
-      }
-      const [head, tail] = parts;
-      const first = await API.speak(head, store.lang);
-      const tailPromise = API.speak(tail, store.lang); // prefetched while head plays
-      rebindPill(pill, text, null);
-      play(first.audio_url, async () => {
-        try {
-          const second = await tailPromise;
-          play(second.audio_url, finish, pill);
-        } catch (err) {
-          toast(`Voice reply failed: ${err.message}`, true);
-          finish();
-        }
-      }, pill);
-    } catch (err) {
-      toast(`Voice reply failed: ${err.message}`, true);
-      finish();
-    }
-  }
-
-  function buildAudioPill(url, text) {
+  function buildAudioPill(text) {
     const pill = document.createElement("div");
     pill.className = "audio-pill";
 
@@ -177,11 +255,7 @@
     pill.appendChild(bars);
     pill.appendChild(meta);
 
-    if (url) {
-      btn.onclick = () => play(url, null, pill);
-    } else {
-      btn.onclick = () => speakInBackground(text, pill, null);
-    }
+    btn.onclick = () => StreamVoice.toggle(pill, text);
     return pill;
   }
 
@@ -235,8 +309,8 @@
     div.innerHTML = html;
 
     let pill = null;
-    if (data && (data.audio_url || who === "Remo")) {
-      pill = buildAudioPill(data.audio_url || null, text);
+    if (who === "Remo") {
+      pill = buildAudioPill(text);
       div.appendChild(pill);
     }
     if (data) pendingChips(data, div);
@@ -779,10 +853,7 @@
       for (const a of alarms || []) {
         toast(`Reminder: ${a.text}`);
         const pill = addTurn($("thread-home"), "Remo", `Reminder: ${a.text}`, { action: "remind_set" });
-        try {
-          const { audio_url } = await API.speak(`Yaad dila raha hoon: ${a.text}`, store.lang);
-          play(audio_url, refresh, pill);
-        } catch { /* stay silent on speak failure */ }
+        speakInBackground(`Yaad dila raha hoon: ${a.text}`, pill, refresh);
       }
       if ((alarms || []).length) refresh();
     } catch { /* ignore */ }
@@ -856,19 +927,20 @@
     });
     if ($("watch-check-btn")) {
       $("watch-check-btn").onclick = async () => {
+        StreamVoice.prime();
         try {
-          const data = await API.turnText("koi update aaya?", store.lang, null);
+          const data = await API.turnText("koi update aaya?", store.lang, null, false);
           toast(data.text);
-          if (data.audio_url) play(data.audio_url, refresh);
-          else refresh();
+          speakInBackground(data.text, null, refresh);
         } catch (err) { toast(`Check failed: ${err.message}`, true); }
       };
     }
     $("brief-speak").onclick = async () => {
+      StreamVoice.prime();
       try {
-        const data = await API.turnText("welcome back", store.lang, null);
+        const data = await API.turnText("welcome back", store.lang, null, false);
         toast(data.text);
-        play(data.audio_url, () => { refresh(); renderBriefing(); });
+        speakInBackground(data.text, null, () => { refresh(); renderBriefing(); });
       } catch (err) { toast(`Briefing failed: ${err.message}`, true); }
     };
     if ($("ctx-brief-btn")) $("ctx-brief-btn").onclick = runBriefingAction;

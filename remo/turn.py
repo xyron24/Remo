@@ -395,11 +395,15 @@ def check_updates(
     s = lang_mod.strings(settings.language)
     if not mem.list_watched():
         return _speak(s["nothing_watched"], "help", settings, speak)
+    prev_mark = mem.last_check_id()
+    if prev_mark is None:
+        prev_mark = 0
     report = watcher_mod.poll_all(mem, token=settings.github_token, fetch=fetch,
                                   lang=lang_mod.lang_key(settings.language))
     deltas = mem.unbriefed_changes()
-    label = datetime.fromtimestamp(report.checked_at).strftime("%I:%M %p").lstrip("0")
-    say, links = watcher_mod.compose_updates(deltas, f"as of {label}", s=s)
+    mem.record_check(mem.max_change_id(), report.checked_at)
+    say = watcher_mod.compose_since_check(mem.count_changes_since(prev_mark), s)
+    links = [c.source_link for _, changes in deltas for c in changes if c.source_link]
     if report.errors and not deltas:
         say = s["updates_offline_alone"] + say
     elif report.errors:
