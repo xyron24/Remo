@@ -311,6 +311,45 @@ def test_google_callback_rejects_bad_state(client: TestClient) -> None:
     assert client.get("/api/me").status_code == 401
 
 
+def test_google_callback_handles_cancel_and_unverified(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "sec")
+    cancelled = client.get("/api/auth/google/callback?error=access_denied", follow_redirects=False)
+    assert cancelled.headers["location"] == "/login?error=cancelled"
+    monkeypatch.setattr(server_mod.auth_mod, "google_exchange_code", lambda *a: "tok")
+    monkeypatch.setattr(
+        server_mod.auth_mod, "google_userinfo",
+        lambda *a: {"email": "g@x.co", "email_verified": False},
+    )
+    client.cookies.clear()
+    client.get("/api/auth/google/start", follow_redirects=False)
+    state = client.cookies.get("remo_oauth_state")
+    done = client.get(f"/api/auth/google/callback?code=c&state={state}", follow_redirects=False)
+    assert done.headers["location"] == "/login?error=unverified"
+    assert client.get("/api/me").status_code == 401
+
+
+def test_google_callback_links_existing_email_account(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "cid")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "sec")
+    monkeypatch.setattr(server_mod.auth_mod, "google_exchange_code", lambda *a: "tok")
+    monkeypatch.setattr(
+        server_mod.auth_mod, "google_userinfo",
+        lambda *a: {"email": "test@example.com", "email_verified": True, "name": "TU"},
+    )
+    client.cookies.clear()
+    client.get("/api/auth/google/start", follow_redirects=False)
+    state = client.cookies.get("remo_oauth_state")
+    done = client.get(f"/api/auth/google/callback?code=c&state={state}", follow_redirects=False)
+    assert done.headers["location"] == "/app"
+    me = client.get("/api/me").json()["user"]
+    assert me["email"] == "test@example.com" and me["provider"] == "email"
+
+
 def test_pdf_import_validates_and_extracts(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     assert client.post("/api/import/pdf", files={"file": ("x.txt", b"hello")}).status_code == 400
     assert client.post("/api/import/pdf", files={"file": ("x.pdf", b"not a pdf")}).status_code == 400
