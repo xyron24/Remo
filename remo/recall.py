@@ -198,9 +198,9 @@ def compose_left_off(notes: list[Note], s: dict | None = None,
     """Pending-first briefing: memories, then tasks, then reminders."""
     s = s or lang_mod.HI
     pending = [n for n in notes if _PENDING_PAT.search(f"{n.text} {n.text_latin}")]
-    shown_notes = [_short(n.text) for n in pending[:3]]
-    shown_tasks = _deduped(list(tasks or []), shown_notes)[:3]
-    shown_rems = [_short(r) for r in (reminders or []) if r.strip()][:4]
+    shown_notes = [lang_mod.to_second_person(_short(n.text)) for n in pending[:3]]
+    shown_tasks = [lang_mod.to_second_person(t) for t in _deduped(list(tasks or []), shown_notes)[:3]]
+    shown_rems = [lang_mod.to_second_person(_short(r)) for r in (reminders or []) if r.strip()][:4]
     parts: list[str] = []
     if shown_notes:
         tail_count = len(notes) - len(pending)
@@ -215,7 +215,7 @@ def compose_left_off(notes: list[Note], s: dict | None = None,
     if not parts:
         if not notes:
             return s["left_off_none"]
-        return s["left_off_all_done"].format(latest=_short(notes[0].text))
+        return s["left_off_all_done"].format(latest=lang_mod.to_second_person(_short(notes[0].text)))
     return " ".join(parts)
 
 
@@ -224,7 +224,7 @@ def compose_recall(notes: list[Note], s: dict | None = None) -> str:
     s = s or lang_mod.HI
     if not notes:
         return s["recall_none"]
-    items = " ".join(_short(n.text) for n in notes[:3])
+    items = " ".join(lang_mod.to_second_person(_short(n.text)) for n in notes[:3])
     return s["recall_found"].format(items=items)
 
 
@@ -261,7 +261,7 @@ def compose_answer(notes: list[Note], mem: Memory, s: dict | None = None) -> str
     if not notes:
         return s["recall_none"]
     best = notes[0]
-    parts = [s["answer_said"].format(task=task_core(best.text))]
+    parts = [s["answer_said"].format(task=lang_mod.to_second_person(task_core(best.text)))]
     span, moment = reminders_mod.extract_time_mention(best.text)
     if span:
         parts.append(s["answer_due"].format(span=span.strip()))
@@ -270,5 +270,5 @@ def compose_answer(notes: list[Note], mem: Memory, s: dict | None = None) -> str
     elif _PENDING_PAT.search(f"{best.text} {best.text_latin}"):
         parts.append(s["answer_pending"].strip())
     elif len(notes) > 1:
-        parts.append(s["recall_found"].format(items=_short(notes[1].text)))
+        parts.append(s["recall_found"].format(items=lang_mod.to_second_person(_short(notes[1].text))))
     return " ".join(parts)

@@ -96,6 +96,14 @@ def test_tomorrow_plan_answers_directly(mem: Memory) -> None:
     assert "Kal ke liye 2 kaam hain" in result.text
     assert "atta" in result.text and "safai" in result.text
     assert "Aapne kaha tha" not in result.text
+    assert "mujhe" not in result.text
+
+
+def test_left_off_answers_in_second_person(mem: Memory) -> None:
+    _run("yaad rakhna mujhe kal ghar ki safai karni hai", mem)
+    result = _run("kya bacha hai", mem)
+    assert result.action == "left_off"
+    assert "aapko" in result.text and "mujhe" not in result.text
 
 
 def test_tomorrow_left_off_lists_day_directly(mem: Memory) -> None:

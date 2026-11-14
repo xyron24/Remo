@@ -179,9 +179,11 @@ def compose_entry(entry: WorkEntry, s: dict | None = None) -> str:
         return s["entry_none"].format(label=label)
     parts = []
     if entry.pending:
-        parts.append(s["entry_pending"].format(label=label, items="; ".join(entry.pending[:4])))
+        items = "; ".join(lang_mod.to_second_person(p) for p in entry.pending[:4])
+        parts.append(s["entry_pending"].format(label=label, items=items))
     if entry.done:
-        parts.append(s["entry_done"].format(items="; ".join(entry.done[:4])))
+        items = "; ".join(lang_mod.to_second_person(d) for d in entry.done[:4])
+        parts.append(s["entry_done"].format(items=items))
     return " ".join(parts)
 
 
@@ -190,7 +192,9 @@ def compose_welcome_back(
 ) -> tuple[str, list[str]]:
     """Your pending items + the world's changes + a suggested next step."""
     s = s or lang_mod.HI
-    pending_all: list[str] = [p for entry in entries for p in entry.pending[:3]]
+    pending_all: list[str] = [
+        lang_mod.to_second_person(p) for entry in entries for p in entry.pending[:3]
+    ]
     total_changes = sum(len(changes) for _, changes in deltas)
     links = [c.source_link for _, changes in deltas for c in changes if c.source_link]
 

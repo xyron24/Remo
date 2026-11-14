@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from remo import lang as lang_mod
 from remo import recall as recall_mod
 from remo.brain_keywords import normalize
 from remo.memory import HashEmbedder, Memory, Note, content_tokens, cosine, fold_text
@@ -111,6 +112,7 @@ def _ask(mem: Memory, session: QuizSession) -> tuple[QuizSession, str]:
             return session, _finale(session)
         return _ask(mem, session)
     question, session.blank = made
+    question = lang_mod.to_second_person(question)
     return session, f"Sawal {session.current + 1}: {question}"
 
 

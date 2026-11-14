@@ -83,6 +83,47 @@
       } catch { /* no audio on this browser */ }
     }
 
+    function tick() {
+      // Original two-tone "heard you" blip. Local synth, zero network.
+      let ac;
+      try { ac = ensureCtx(); } catch { return; }
+      if (ac.state === "suspended") ac.resume().catch(() => {});
+      const t0 = ac.currentTime + 0.01;
+      [[880, 0], [1318.5, 0.09]].forEach(([freq, dt]) => {
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, t0 + dt);
+        gain.gain.exponentialRampToValueAtTime(0.25, t0 + dt + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.08);
+        osc.connect(gain);
+        gain.connect(ac.destination);
+        osc.start(t0 + dt);
+        osc.stop(t0 + dt + 0.1);
+      });
+    }
+
+    function playBuffer(buf, delay = 0) {
+      // Fire-and-forget a pre-decoded buffer (the instant ack). Tracked so
+      // halt() still cuts it when the real reply starts speaking.
+      let ac;
+      try { ac = ensureCtx(); } catch { return; }
+      if (ac.state === "suspended") ac.resume().catch(() => {});
+      const my = generation;
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      src.connect(ac.destination);
+      src.onended = () => {
+        const i = sources.indexOf(src);
+        if (i >= 0) sources.splice(i, 1);
+      };
+      try {
+        src.start(Math.max(ac.currentTime + delay, 0));
+      } catch { return; }
+      if (my === generation) sources.push(src);
+    }
+
     function setIcon(pill, playing) {
       const useEl = pill && pill.querySelector(".audio-play use");
       if (useEl) useEl.setAttribute("href", playing ? "#i-pause" : "#i-play");
@@ -196,13 +237,45 @@
       speak(text, pill, null);
     }
 
-    return { speak, toggle, halt, prime };
+    return { speak, toggle, halt, prime, tick, playBuffer, context: ensureCtx };
   })();
 
   // Unlock audio on every real gesture, so post-reply playback is never blocked.
   ["pointerdown", "keydown"].forEach((ev) =>
     window.addEventListener(ev, () => StreamVoice.prime(), { passive: true })
   );
+
+  /* ---------- instant mic-stop ack ("samajh gaya") ---------- */
+  const ACK_TEXT = {
+    "hi-IN": "Achha, bus ek second rukiye.",
+    "mr-IN": "Achha, bas ek second thamba.",
+  };
+  let ackBuf = null, ackLang = null, ackFetching = null;
+  function ackLangNow() { return store.lang === "mr-IN" ? "mr-IN" : "hi-IN"; }
+  async function prefetchAck() {
+    // Warms the ack in the background (server disk-caches it after one synth),
+    // so mic-stop playback never waits on the network.
+    const lang = ackLangNow();
+    if ((ackBuf && ackLang === lang) || ackFetching === lang) return;
+    ackFetching = lang;
+    try {
+      const data = await API.speak(ACK_TEXT[lang], lang);
+      if (!data || !data.audio_url) return;
+      const res = await fetch(data.audio_url);
+      if (!res.ok) return;
+      const raw = await res.arrayBuffer();
+      ackBuf = await StreamVoice.context().decodeAudioData(raw);
+      ackLang = lang;
+    } catch { /* a later mic stop retries */ }
+    finally { ackFetching = null; }
+  }
+  function playAck() {
+    if (ackBuf && ackLang === ackLangNow() && store.autoplay) {
+      StreamVoice.playBuffer(ackBuf, 1.5);
+    } else {
+      prefetchAck();
+    }
+  }
 
   /* ---------- router ---------- */
   const PAGES = ["home", "ask", "memories", "work", "reminders", "watchlist", "briefing", "voice", "settings", "profile"];
@@ -419,7 +492,7 @@
       },
     });
 
-    let timer = 0, timerInt = 0;
+    let timer = 0, timerInt = 0, recStartedAt = 0;
     function startTimer() {
       timer = 0;
       timerEl.hidden = false;
@@ -445,12 +518,17 @@
       if (session.isLive()) {
         setState("processing", "Thinking…");
         setSide("thinking", "Thinking");
+        StreamVoice.prime();
+        StreamVoice.tick();
+        const heard = Date.now() - recStartedAt > 700;
         session.stop();
+        if (heard) playAck(); else prefetchAck();
         return;
       }
       heardEl.hidden = true;
       try {
         await session.start(streamUrl());
+        recStartedAt = Date.now();
         startTimer();
         if (cardEl) cardEl.classList.add("is-live");
         setState("listening", "Listening… tap mic or press Space when done");
@@ -806,6 +884,7 @@
     $("set-mr").classList.toggle("on", code === "mr-IN");
     if ($("v-lang-hi")) $("v-lang-hi").classList.toggle("on", code === "hi-IN");
     if ($("v-lang-mr")) $("v-lang-mr").classList.toggle("on", code === "mr-IN");
+    prefetchAck();
   }
 
   function applyTheme(theme) {
@@ -853,7 +932,7 @@
       for (const a of alarms || []) {
         toast(`Reminder: ${a.text}`);
         const pill = addTurn($("thread-home"), "Remo", `Reminder: ${a.text}`, { action: "remind_set" });
-        speakInBackground(`Yaad dila raha hoon: ${a.text}`, pill, refresh);
+        speakInBackground(`Yaad dila raha hoon: ${a.say_text || a.text}`, pill, refresh);
       }
       if ((alarms || []).length) refresh();
     } catch { /* ignore */ }

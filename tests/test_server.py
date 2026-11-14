@@ -228,6 +228,15 @@ def test_speak_stream_proxies_pcm_and_validates(
     assert len(response.content) % 2 == 0 and len(response.content) > 0
 
 
+def test_speak_returns_audio_url_and_bytes(client: TestClient) -> None:
+    assert client.post("/api/speak", json={"text": "  "}).status_code == 400
+    data = client.post("/api/speak", json={"text": "Theek hai, main samajh gaya."}).json()
+    assert data["audio_url"].endswith(".wav")
+    audio = client.get(data["audio_url"])
+    assert audio.status_code == 200
+    assert len(audio.content) > 44
+
+
 def test_register_login_me_logout_roundtrip(client: TestClient) -> None:
     client.cookies.clear()
     assert client.post("/api/auth/register", json={"email": "bad", "password": "password-1"}).status_code == 400

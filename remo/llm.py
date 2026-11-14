@@ -45,6 +45,9 @@ _SYSTEM = (
     + "You answer questions about the user's own notes. Use ONLY the notes below. "
     "Answer from them as far as they go; if something is missing, first say what "
     "the notes do say, then add what is missing in one short sentence. "
+    "Address the user in the second person: say aapko/aapke/aapki "
+    "(aapko kal ye kaam karna hai), never echo their first-person words "
+    "like mujhe, mujhko, mere, or maine. "
     "Reply in {lang}: 2-3 short spoken sentences, no quotes, no lists, "
     "no 'you said' framing."
 )
@@ -108,11 +111,13 @@ _INTENT_SYSTEM = (
     "add_task: the user wants to add a to-do task (add task, ...). Put the task in "
     '"task_text". '
     "For recall, also fill \"reply\" with the FULL user-facing answer composed from the context "
-    "below (2-4 short spoken sentences in the user's language, no quotes, no lists); leave it "
-    "empty only when the context cannot answer the question. "
+    "below (2-4 short spoken sentences in the user's language, no quotes, no lists), addressing "
+    "the user in the second person (aapko ... karna hai), never echoing their mujhe/mere "
+    "phrasing; leave it empty only when the context cannot answer the question. "
     "other: greetings, chit-chat, or anything else. Put a short reply in "
-    '"reply", 1-2 sentences in the user\'s language. NEVER invent memories, notes, tasks, or '
-    "appointments; if asked about those, say you do not remember any."
+    '"reply", 1-2 sentences in the user\'s language, second person for the user. '
+    "NEVER invent memories, notes, tasks, or appointments; if asked about those, say you "
+    "do not remember any."
 )
 
 
@@ -444,7 +449,9 @@ def try_intent(text: str, mem: Memory, settings: Settings) -> dict | None:
 _BRIEF_SYSTEM = (
     _PERSONA
     + "You speak a welcome-back briefing for a voice assistant. Pending work first, then what is "
-    "new out there. Reply in {lang}: 3-5 short spoken sentences, warm and direct, no quotes, "
+    "new out there. Address the user in the second person (aapko ...), never echo their "
+    "first-person note words like mujhe or mere. "
+    "Reply in {lang}: 3-5 short spoken sentences, warm and direct, no quotes, "
     "no lists, no URLs (links travel separately, never speak them)."
 )
 
@@ -477,7 +484,9 @@ _LEFT_OFF_SYSTEM = (
     _PERSONA
     + "You speak a 'what is left' answer for a voice assistant. State what is pending from the "
     "memories first, then remaining tasks with their count, then armed reminders with their "
-    "count. Reply in {lang}: short spoken sentences, warm and direct, no quotes, no lists."
+    "count. Address the user in the second person (aapko ... karna hai), never echo their "
+    "first-person words like mujhe, mujhko, mere, or maine. "
+    "Reply in {lang}: short spoken sentences, warm and direct, no quotes, no lists."
 )
 
 

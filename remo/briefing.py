@@ -119,13 +119,14 @@ def compose_plan(mem: Memory, now: datetime | None = None, s: dict | None = None
     parts: list[str] = []
     if today:
         items = "; ".join(
-            f"{r.text} ({_clock(datetime.fromtimestamp(r.fire_at))})" for r in today[:5]
+            f"{lang_mod.to_second_person(r.text)} ({_clock(datetime.fromtimestamp(r.fire_at))})"
+            for r in today[:5]
         )
         parts.append(s["plan_rems"].format(n=len(today), items=items))
     else:
         parts.append(s["plan_no_rems"])
     if notes:
-        items = "; ".join(n.text for n in notes[:3])
+        items = "; ".join(lang_mod.to_second_person(n.text) for n in notes[:3])
         parts.append(s["plan_notes"].format(items=items))
     else:
         parts.append(s["plan_no_notes"])
@@ -151,8 +152,11 @@ def compose_day_plan(
         if toks & set(content_tokens(f"{n.text} {n.text_latin}"))
         and not _DONE_PAT.search(f"{n.text} {n.text_latin}")
     ]
-    items = [recall_mod.task_core(n.text) for n in notes]
-    items += [f"{r.text} ({_clock(datetime.fromtimestamp(r.fire_at))})" for r in due]
+    items = [lang_mod.to_second_person(recall_mod.task_core(n.text)) for n in notes]
+    items += [
+        f"{lang_mod.to_second_person(r.text)} ({_clock(datetime.fromtimestamp(r.fire_at))})"
+        for r in due
+    ]
     if not items:
         return s[f"dayplan_none_{day}"]
     verb = s["dayplan_verb_one"] if len(items) == 1 else s["dayplan_verb_many"]

@@ -6,6 +6,8 @@ native speaker reviews them , they fall back automatically (never crash).
 """
 from __future__ import annotations
 
+import re
+
 HI = {
     "ack_saved": "Yaad kar liya.",
     "ack_saved_warm": "Theek hai, yaad rakh lunga.",
@@ -187,3 +189,42 @@ def resolve_voice(explicit_voice: str = "", code: str | None = "hi-IN") -> str:
     if explicit_voice:
         return explicit_voice
     return profile(code).get("tts_voice", DEFAULT_VOICE)
+
+
+# First-person user pronouns -> second person, for note/task text spoken back.
+# Deliberately skips "main" and "mein": as English ("main gate") or "in"
+# ("ghar mein") they outnumber the "I" reading, and a wrong flip reads absurd.
+_SECOND_PERSON = (
+    ("mere ko", "aapko"), ("mujh ko", "aapko"),
+    ("mujhko", "aapko"), ("mujhse", "aapse"), ("mujhe", "aapko"), ("mereko", "aapko"),
+    ("maine", "aapne"), ("meri", "aapki"), ("mere", "aapke"), ("mera", "aapka"),
+    ("mujh", "aap"),
+    ("humein", "aapko"), ("hume", "aapko"), ("humko", "aapko"),
+    ("hamare", "aapke"), ("hamari", "aapki"), ("hamara", "aapka"), ("hum", "aap"),
+    ("mala", "tumhala"), ("mazi", "tumchi"), ("maze", "tumche"), ("maza", "tumcha"),
+    ("mi", "tumhi"),
+    ("मुझको", "आपको"), ("मुझसे", "आपसे"), ("मुझे", "आपको"), ("मैंने", "आपने"),
+    ("मेरी", "आपकी"), ("मेरे", "आपके"), ("मेरा", "आपका"), ("मैं", "आप"), ("मुझ", "आप"),
+    ("मला", "तुम्हाला"), ("माझी", "तुमची"), ("माझे", "तुमचे"), ("माझा", "तुमचा"),
+    ("मी", "तुम्ही"),
+)
+# \b is wrong here: Devanagari matras are marks, not word chars, so a trailing
+# matra would never form a boundary. Guard on the scripts themselves instead.
+_SECOND_PERSON_RX = re.compile(
+    r"(?<![A-Za-z\u0900-\u097F'])("
+    + "|".join(re.escape(k) for k, _ in _SECOND_PERSON)
+    + r")(?![A-Za-z\u0900-\u097F'])",
+    re.IGNORECASE,
+)
+_SECOND_PERSON_MAP = dict(_SECOND_PERSON)
+
+
+def to_second_person(text: str) -> str:
+    """Retell the user's own words addressing them ("mujhe ..." -> "aapko ...").
+
+    Only for deterministic templates quoting note/task text. Never run over
+    model output: there "mujhe" can be the assistant speaking of itself.
+    """
+    if not text:
+        return text
+    return _SECOND_PERSON_RX.sub(lambda m: _SECOND_PERSON_MAP[m.group(0).lower()], text)

@@ -146,7 +146,7 @@ def _llm_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: dic
         if not hits:
             return _speak(s["nothing_named"], "recall", settings, speak)
         return _speak(
-            s["forget_ask"].format(text=hits[0].text),
+            s["forget_ask"].format(text=lang_mod.to_second_person(hits[0].text)),
             "forget_ask",
             settings,
             speak,
@@ -270,7 +270,7 @@ def _pattern_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s:
         if not hits:
             return _speak(s["nothing_named"], "recall", settings, speak)
         return _speak(
-            s["forget_ask"].format(text=hits[0].text),
+            s["forget_ask"].format(text=lang_mod.to_second_person(hits[0].text)),
             "forget_ask",
             settings,
             speak,
@@ -350,7 +350,7 @@ def _remind_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: 
         return _speak(s["ask_task"], "remind_ask", settings, speak, pending=pending)
     readback = reminders_mod.format_readback(moment, datetime.now())
     pending = {"action": "remind", "text": task, "fire_at": moment.timestamp()}
-    return _speak(s["remind_confirm"].format(readback=readback, task=task), "remind_confirm",
+    return _speak(s["remind_confirm"].format(readback=readback, task=lang_mod.to_second_person(task)), "remind_confirm",
                   settings, speak, pending=pending)
 
 
@@ -366,7 +366,7 @@ def complete_remind_task(
     fire_at = float((pending or {}).get("fire_at", 0))
     mem.add_reminder(text.strip(), fire_at)
     readback = reminders_mod.format_readback(datetime.fromtimestamp(fire_at), datetime.now())
-    return _speak(s["remind_armed"].format(readback=readback, task=text.strip()), "reminded", settings, speak)
+    return _speak(s["remind_armed"].format(readback=readback, task=lang_mod.to_second_person(text.strip())), "reminded", settings, speak)
 
 
 def _watch_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: dict) -> TurnResult:

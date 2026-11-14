@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from remo import auth as auth_mod
 from remo import boost as boost_mod
 from remo import brain_keywords as kw
+from remo import lang as lang_mod
 from remo import llm as llm_mod
 from remo import turn as turn_mod
 from remo.capture.audio import downsample_mono16
@@ -589,7 +590,9 @@ def info() -> JSONResponse:
 @app.get("/api/alarms", dependencies=[Depends(current_user)])
 def alarms() -> JSONResponse:
     due = reminders_mod.collect_due(get_db_path())
-    return JSONResponse({"alarms": [{"id": r.id, "text": r.text} for r in due]})
+    return JSONResponse({"alarms": [
+        {"id": r.id, "text": r.text, "say_text": lang_mod.to_second_person(r.text)} for r in due
+    ]})
 
 
 @app.post("/api/speak", dependencies=[Depends(current_user)])
