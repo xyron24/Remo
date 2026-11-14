@@ -58,6 +58,8 @@
   }
   const StreamVoice = (() => {
     let ctx = null, generation = 0, reader = null, sources = [], active = null;
+    let busy = false, speaker = 0;
+    const pending = [];
 
     function ensureCtx() {
       if (!ctx) {
@@ -129,7 +131,7 @@
       if (useEl) useEl.setAttribute("href", playing ? "#i-pause" : "#i-play");
     }
 
-    function halt() {
+    function stopAudio() {
       generation++;
       try { reader && reader.cancel(); } catch { /* gone */ }
       reader = null;
@@ -138,15 +140,38 @@
       if (active) { clearActivePill(); active = null; }
     }
 
+    function halt() {
+      stopAudio();
+      pending.length = 0;
+      busy = false;
+      speaker++;
+    }
+
+    function pump() {
+      if (busy || !pending.length) return;
+      const next = pending.shift();
+      speak(next.text, next.pill, next.done);
+    }
+
     async function speak(text, pill, done) {
-      halt();
+      if (busy) {
+        // Something is already speaking: queue behind it instead of cutting it.
+        if (pending.length < 3) pending.push({ text, pill, done });
+        else done && done();
+        return;
+      }
+      busy = true;
+      const mine = ++speaker;
+      stopAudio();
       const my = generation;
       const alive = () => my === generation;
       const finish = (err) => {
-        if (!alive()) return;
+        if (!alive()) { if (mine === speaker) busy = false; return; }
         if (active) { clearActivePill(); active = null; }
         if (err) toast(`Voice reply failed: ${err}`, true);
         done && done();
+        busy = false;
+        pump();
       };
       let ac;
       try {
@@ -176,8 +201,8 @@
         finish("server away");
         return;
       }
-      if (!alive()) return;
-      if (res.status === 401) { window.location.href = "/login"; return; }
+      if (!alive()) { if (mine === speaker) busy = false; return; }
+      if (res.status === 401) { busy = false; window.location.href = "/login"; return; }
       if (!res.ok) {
         let detail = "";
         try { detail = (await res.json()).detail || ""; } catch { detail = ""; }
@@ -190,7 +215,7 @@
       try {
         for (;;) {
           const { done: streamDone, value } = await reader.read();
-          if (!alive()) return;
+          if (!alive()) { if (mine === speaker) busy = false; return; }
           if (streamDone) break;
           let bytes = value;
           if (carry) {
@@ -237,7 +262,34 @@
       speak(text, pill, null);
     }
 
-    return { speak, toggle, halt, prime, tick, playBuffer, context: ensureCtx };
+    function urgent(text, pill, done) {
+      // Alarms jump the queue: stop everything and ring now.
+      halt();
+      speak(text, pill, done);
+    }
+
+    function chime() {
+      // Soft three-note alarm bell. Local synth, zero network.
+      let ac;
+      try { ac = ensureCtx(); } catch { return; }
+      if (ac.state === "suspended") ac.resume().catch(() => {});
+      const t0 = ac.currentTime + 0.01;
+      [[880, 0], [659.25, 0.18], [880, 0.36]].forEach(([freq, dt]) => {
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, t0 + dt);
+        gain.gain.exponentialRampToValueAtTime(0.3, t0 + dt + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.16);
+        osc.connect(gain);
+        gain.connect(ac.destination);
+        osc.start(t0 + dt);
+        osc.stop(t0 + dt + 0.18);
+      });
+    }
+
+    return { speak, toggle, halt, urgent, prime, tick, chime, playBuffer, context: ensureCtx };
   })();
 
   // Unlock audio on every real gesture, so post-reply playback is never blocked.
@@ -932,7 +984,8 @@
       for (const a of alarms || []) {
         toast(`Reminder: ${a.text}`);
         const pill = addTurn($("thread-home"), "Remo", `Reminder: ${a.text}`, { action: "remind_set" });
-        speakInBackground(`Yaad dila raha hoon: ${a.say_text || a.text}`, pill, refresh);
+        StreamVoice.chime();
+        StreamVoice.urgent(`Yaad dila raha hoon: ${a.say_text || a.text}`, pill, refresh);
       }
       if ((alarms || []).length) refresh();
     } catch { /* ignore */ }
@@ -1105,6 +1158,10 @@
     loadInfo();
     setInterval(refresh, 10000);
     setInterval(pollAlarms, 5000);
+    // Background tabs get throttled timers: poll the moment the tab is visible again.
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) { refresh(); pollAlarms(); }
+    });
   }
 
   let importSource = "";

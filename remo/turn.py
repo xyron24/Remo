@@ -31,9 +31,11 @@ from remo import worklog as worklog_mod
 log = get_logger("turn")
 
 _REMIND_MARKERS = ("yaad dilana", "yaad dila", "remind me", "reminder lagao", "reminder", "aathvan",
-                   "utha dena", "utha do", "jaga dena", "jaga do", "alarm lagao", "alarm laga do")
+                   "utha dena", "utha do", "jaga dena", "jaga do", "alarm lagao", "alarm laga do",
+                   "dilana")
 
-_WATCH_MARKERS = ("watch karo", "track karo", "nazar rakho", "watch this", "laksh thev", "watchlist")
+_WATCH_MARKERS = ("watch karo", "track karo", "nazar rakho", "watch this", "laksh thev", "watchlist",
+                  "watch list")
 
 _UPDATE_MARKERS = ("koi update", "update aaya", "update aaye", "check update", "naya kya hai", "what changed",
                    "what's new", "koi badlaav", "kahi update", "kay badal")
@@ -41,11 +43,33 @@ _UPDATE_MARKERS = ("koi update", "update aaya", "update aaye", "check update", "
 _WELCOME_MARKERS = ("welcome back", "vapas aaya", "wapas aaya", "wapis aaya", "vapas aa gaya", "main vapas")
 
 _DEVA_MARKERS = {
-    "remind": ("रिमाइंड",),
+    "remind": ("रिमाइंड", "दिलाना", "दिला"),
     "watch": ("वॉच", "ट्रैक", "नजर", "लक्ष", "वॉचलिस्ट"),
     "update": ("अपडेट",),
     "welcome": ("वेलकम",),
 }
+
+_WATCHLIST_WORDS = ("watchlist", "वॉचलिस्ट")
+_WATCHLIST_Q_WORDS = frozenset({"kya", "kay", "kaay", "what", "क्या", "काय"})
+_WATCHLIST_CHANGE_WORDS = frozenset({
+    "change", "changes", "changed", "chenj", "badlaav", "badlav", "update", "naya",
+    "चेंज", "चेंजेस", "बदलाव", "बदल", "अपडेट", "नया",
+})
+
+
+def _asks_about_watchlist(text: str) -> bool:
+    """'watchlist mein kya hua/changes' asks for a check, not a new watch."""
+    from remo.memory import content_tokens, fold_text
+
+    norm = kw.normalize(text)
+    folded = fold_text(text)
+    # STT often splits the compound ("वॉच लिस्ट", "watch list"): squash spaces.
+    squashed = [s.replace(" ", "") for s in (norm, folded, text)]
+    if not any(w in sq for sq in squashed for w in _WATCHLIST_WORDS):
+        return False
+    toks = set(content_tokens(text)) | set(norm.split()) | set(folded.split())
+    return not toks.isdisjoint(_WATCHLIST_Q_WORDS | _WATCHLIST_CHANGE_WORDS)
+
 
 _WORD_MARKERS = {
     # Singles that mean the intent alone ("reminder" -> ask when/what).
@@ -373,10 +397,12 @@ def _watch_turn(text: str, *, mem: Memory, settings: Settings, speak: bool, s: d
     match = re.search(r"https?://\S+", text)
     url = match.group(0).rstrip(".,!?:;") if match else ""
     kind = watcher_mod.kind_for_url(url) if url else None
-    if not kind:
-        return _speak(s["bad_watch_url"], "help", settings, speak)
-    mem.watch_url(kind, url)
-    return _speak(s["watching_ok"], "watching", settings, speak)
+    if kind:
+        mem.watch_url(kind, url)
+        return _speak(s["watching_ok"], "watching", settings, speak)
+    if _marker_hit(text, _UPDATE_MARKERS, "update") or _asks_about_watchlist(text):
+        return check_updates(mem=mem, settings=settings, speak=speak)
+    return _speak(s["bad_watch_url"], "help", settings, speak)
 
 
 def _mark_deltas_briefed(mem: Memory, deltas) -> None:

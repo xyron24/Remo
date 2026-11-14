@@ -59,6 +59,55 @@ def test_updates_with_nothing_watched(mem: Memory) -> None:
     assert "kuch watch nahi" in result.text
 
 
+def test_watchlist_change_questions_run_update_check(mem: Memory) -> None:
+    from unittest import mock
+
+    from remo import watcher as watcher_mod
+
+    watched = mem.watch_url("github_repo", "https://github.com/o/alpha")
+    mem.store_changes(watched.id, [("Ek badlaav.", "", "", 1.0)])
+
+    def empty_poll(mem_inner, token="", fetch=None, lang="hi"):
+        return watcher_mod.PollReport(checked=1, new_changes=0, checked_at=1730000000.0)
+
+    with mock.patch.object(watcher_mod, "poll_all", empty_poll):
+        first = _run("watchlist mein kya changes hain", mem)
+        assert first.action == "updates"
+        assert first.text == "1 naya badlaav hua hai."
+        second = _run("watchlist mein kya hua hai", mem)
+        assert second.action == "updates"
+        assert second.text == "Koi naya badlaav nahi hai."
+        third = _run("वॉचलिस्ट में क्या बदलाव हैं", mem)
+        assert third.action == "updates"
+        assert third.text == "Koi naya badlaav nahi hai."
+
+
+def test_watchlist_without_question_keeps_help(mem: Memory) -> None:
+    result = _run("watchlist dikhao", mem)
+    assert result.action == "help"
+
+
+def test_spaced_watchlist_and_change_wording_routes_to_check(mem: Memory) -> None:
+    from unittest import mock
+
+    from remo import watcher as watcher_mod
+
+    watched = mem.watch_url("github_repo", "https://github.com/o/alpha")
+    mem.store_changes(watched.id, [("Ek badlaav.", "", "", 1.0)])
+
+    def empty_poll(mem_inner, token="", fetch=None, lang="hi"):
+        return watcher_mod.PollReport(checked=1, new_changes=0, checked_at=1730000000.0)
+
+    with mock.patch.object(watcher_mod, "poll_all", empty_poll):
+        first = _run("वॉच लिस्ट में क्या चेंज आया?", mem)
+        assert first.action == "updates"
+        assert first.text == "1 naya badlaav hua hai."
+        second = _run("watch list mein kya changes hain", mem)
+        assert second.action == "updates"
+        third = _run("watchlist mein change aaya", mem)
+        assert third.action == "updates"
+
+
 def test_updates_poll_and_brief_with_links(mem: Memory) -> None:
     from remo import watcher as watcher_mod
 

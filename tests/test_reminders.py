@@ -63,6 +63,32 @@ def test_task_split() -> None:
     assert moment == TUESDAY_9AM + timedelta(minutes=5)
 
 
+def test_relative_times_devanagari_and_word_numbers() -> None:
+    assert parse_reminder_time("1 मिनट बाद दवाइयाँ दिलाना", TUESDAY_9AM) == TUESDAY_9AM + timedelta(minutes=1)
+    assert parse_reminder_time("2 घंटे बाद call करना", TUESDAY_9AM) == TUESDAY_9AM + timedelta(hours=2)
+    assert parse_reminder_time("do minute baad chai", TUESDAY_9AM) == TUESDAY_9AM + timedelta(minutes=2)
+    assert parse_reminder_time("पांच मिनट बाद दवा", TUESDAY_9AM) == TUESDAY_9AM + timedelta(minutes=5)
+    assert parse_reminder_time("१ मिनट बाद दवा", TUESDAY_9AM) == TUESDAY_9AM + timedelta(minutes=1)
+
+
+def test_devanagari_day_time() -> None:
+    assert parse_reminder_time("कल सुबह 8 बजे उठा देना", TUESDAY_9AM) == datetime(2026, 11, 11, 8, 0)
+    assert parse_reminder_time("मुझे कल सुबह 08:00 बजे उठा देना", TUESDAY_9AM) == datetime(2026, 11, 11, 8, 0)
+    assert parse_reminder_time("परसों शाम 5 बजे walk", TUESDAY_9AM) == datetime(2026, 11, 12, 17, 0)
+    assert parse_reminder_time("आज रात 9 बजे दवा", TUESDAY_9AM) == datetime(2026, 11, 10, 21, 0)
+    assert parse_reminder_time("शुक्रवार शाम 4 बजे meeting", TUESDAY_9AM) == datetime(2026, 11, 13, 16, 0)
+    assert parse_reminder_time("सवा नौ बजे चाय", TUESDAY_9AM) == datetime(2026, 11, 10, 9, 15)
+
+
+def test_task_split_devanagari() -> None:
+    task, moment = split_task_time("1 मिनट बाद दवाइयाँ दिलाना", TUESDAY_9AM)
+    assert task == "दवाइयाँ"
+    assert moment == TUESDAY_9AM + timedelta(minutes=1)
+    task, moment = split_task_time("मुझे कल सुबह 08:00 बजे उठा देना", TUESDAY_9AM)
+    assert task == "उठा देना"
+    assert moment == datetime(2026, 11, 11, 8, 0)
+
+
 def test_no_time_found() -> None:
     assert parse_reminder_time("kabhi chai peena", TUESDAY_9AM) is None
 

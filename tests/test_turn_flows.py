@@ -50,6 +50,25 @@ def test_remind_without_time_asks_when(mem: Memory) -> None:
     assert "Kab yaad dilaun" in result.text
 
 
+def test_remind_devanagari_relative_arms(mem: Memory) -> None:
+    asked = _run("1 मिनट बाद दवाइयाँ दिलाना", mem)
+    assert asked.action == "remind_confirm"
+    assert "दवाइयाँ" in asked.text
+
+
+def test_remind_devanagari_absolute_arms(mem: Memory) -> None:
+    asked = _run("मुझे कल सुबह 08:00 बजे उठा देना", mem)
+    assert asked.action == "remind_confirm"
+    assert "kal subah 8 baje" in asked.text
+    assert "उठा देना" in asked.text
+
+
+def test_remind_bare_dilana_arms(mem: Memory) -> None:
+    asked = _run("1 minute baad davai dilana", mem)
+    assert asked.action == "remind_confirm"
+    assert "davai" in asked.text
+
+
 def test_remind_without_task_asks_what_then_arms(mem: Memory) -> None:
     asked = _run("5 minute baad yaad dilana", mem)
     assert asked.action == "remind_ask"

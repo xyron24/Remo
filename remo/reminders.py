@@ -1,6 +1,7 @@
 """Reminders: Hinglish time parsing, persistent firing, spoken alarms.
 
-Understands "5 minute baad", "saade nau", "kal subah 9 baje", "friday 4 pm".
+Understands "5 minute baad", "1 मिनट बाद", "saade nau", "kal subah 9 baje",
+"कल सुबह 8 बजे", "friday 4 pm". Latin and Devanagari have full parity.
 Fired reminders disarm in SQLite, so alarms survive restarts.
 """
 from __future__ import annotations
@@ -24,6 +25,9 @@ NUM_WORDS = {
     "paanch": 5, "panch": 5, "che": 6, "chhe": 6, "saat": 7,
     "aath": 8, "ath": 8, "nau": 9, "nav": 9, "das": 10,
     "gyarah": 11, "baarah": 12, "barah": 12,
+    "एक": 1, "दो": 2, "तीन": 3, "चार": 4, "पांच": 5, "पाँच": 5,
+    "छह": 6, "सात": 7, "आठ": 8, "नौ": 9, "दस": 10,
+    "ग्यारह": 11, "बारह": 12,
 }
 
 WEEKDAYS = {
@@ -33,33 +37,62 @@ WEEKDAYS = {
     "budhvar": 2, "budh": 2, "guruwar": 3, "brihaspati": 3,
     "shukravar": 4, "shukra": 4, "shanivar": 5, "shani": 5,
     "ravivaar": 6, "ravivar": 6,
+    "सोमवार": 0, "मंगलवार": 1, "बुधवार": 2, "गुरुवार": 3,
+    "बृहस्पतिवार": 3, "शुक्रवार": 4, "शनिवार": 5, "रविवार": 6,
+    "सोम": 0, "मंगल": 1, "बुध": 2, "गुरु": 3, "शुक्र": 4, "शनि": 5,
 }
 
 FILLERS = {
     "yaad", "dilana", "dila", "remind", "me", "reminder",
     "mujhe", "ko", "ki", "ke", "ka", "please", "zara", "ek", "baje",
     "tu", "tum", "aap",
+    "याद", "दिलाना", "दिला", "मुझे",
 }
 
 # Bare "dena" is task content ("utha dena" = wake me up); only the reminder
 # construction "dila dena" is filler.
 _DILA_DENA = re.compile(r"\bdila\s+dena\b", re.IGNORECASE)
 
+_DAYPARTS = r"subah|dopahar|shaam|raat|सुबह|दोपहर|शाम|रात"
+_DAYPART_DEV = {"सुबह": "subah", "दोपहर": "dopahar", "शाम": "shaam", "रात": "raat"}
+_BAJE_WORD = r"baje|बजें?"
+_NUM_TOKEN = r"\d+|[a-zA-Z\u0900-\u097F]+"
+
 _RELATIVE = re.compile(
-    r"(\d+)\s*(seconds?|minutes?|mins?|ghante?|ghanta|hours?|hrs?|din|dino|hafte|hafto)\s*baad", re.I
+    rf"({_NUM_TOKEN})\s*"
+    r"(seconds?|minutes?|mins?|मिनट|मिनिट|hours?|hrs?|ghante?|ghanta|"
+    r"घंटे?|घंटा|घण्टे?|घण्टा|din|dino|दिनों?|hafte|hafto|हफ्ते|हफ्ता|सप्ताह)\s*(baad|बाद)",
+    re.I,
 )
 
 _RELATIVE_SECONDS = (
-    (("hour", "hr", "ghant", "ghanta"), 3600),
-    (("min",), 60),
-    (("din", "dino"), 86400),
-    (("haft", "hafto"), 604800),
+    (("hour", "hr", "ghant", "ghanta", "घंट", "घण्ट"), 3600),
+    (("min", "मिनट", "मिनिट"), 60),
+    (("din", "dino", "दिन"), 86400),
+    (("haft", "hafto", "हफ्त", "सप्ताह"), 604800),
 )
-_FRACTION = re.compile(r"(sava|saade|saadhe|sadhe|paune|pauna)\s*(\d+|[a-zA-Z]+)", re.I)
-_CLOCK = re.compile(r"(\d{1,2}):(\d{2})\s*(am|pm)?", re.I)
-_MERIDIEM = re.compile(r"(\d{1,2}|[a-zA-Z]+)\s*(am|pm)\b", re.I)
-_BAJE = re.compile(r"(subah|dopahar|shaam|raat)?\s*(\d+|[a-zA-Z]+)\s*baje\s*(am|pm)?", re.I)
-_BAJE_TRAIL = re.compile(r"(\d+)\s*baje\s*(subah|dopahar|shaam|raat)", re.I)
+_FRACTION = re.compile(
+    rf"(sava|saade|saadhe|sadhe|paune|pauna|सवा|साढे|साढ़े|पौने|पोने)\s*({_NUM_TOKEN})", re.I
+)
+_CLOCK = re.compile(
+    rf"({_DAYPARTS})?\s*(\d{{1,2}}):(\d{{2}})\s*({_BAJE_WORD})?\s*({_DAYPARTS})?\s*(am|pm)?", re.I
+)
+_MERIDIEM = re.compile(rf"({_NUM_TOKEN})\s*(am|pm)\b", re.I)
+_BAJE = re.compile(rf"({_DAYPARTS})?\s*({_NUM_TOKEN})\s*({_BAJE_WORD})\s*(am|pm)?", re.I)
+_BAJE_TRAIL = re.compile(rf"({_NUM_TOKEN})\s*({_BAJE_WORD})\s*({_DAYPARTS})", re.I)
+
+
+def _find_word(text: str, *words: str) -> re.Match[str] | None:
+    """First whole-word hit; script-aware guards (\b misses Devanagari matras)."""
+    for word in words:
+        match = re.search(
+            r"(?<![A-Za-z\u0900-\u097F'])" + re.escape(word) + r"(?![A-Za-z\u0900-\u097F'])",
+            text,
+            re.I,
+        )
+        if match:
+            return match
+    return None
 
 
 def _num(token: str) -> int | None:
@@ -99,9 +132,11 @@ def _extract(text: str, now: datetime) -> tuple[list[tuple[int, int]], datetime 
     """Matched time spans + resolved datetime (None when no time found)."""
     spans: list[tuple[int, int]] = []
 
-    match = _RELATIVE.search(text)
+    match = next(
+        (m for m in _RELATIVE.finditer(text) if _num(m.group(1)) is not None), None
+    )
     if match:
-        amount = int(match.group(1))
+        amount = _num(match.group(1)) or 0
         unit = match.group(2).lower()
         scale = 1
         for prefixes, seconds in _RELATIVE_SECONDS:
@@ -112,23 +147,23 @@ def _extract(text: str, now: datetime) -> tuple[list[tuple[int, int]], datetime 
 
     offset = 0
     weekday = False
-    match = re.search(r"\bparso\b", text, re.I)
+    match = _find_word(text, "parso", "परसों", "परसो")
     if match:
         offset, spans = 2, [(match.start(), match.end())]
     else:
         for name, day in WEEKDAYS.items():
-            match = re.search(rf"\b{name}\b", text, re.I)
+            match = _find_word(text, name)
             if match:
                 offset = (day - now.weekday()) % 7
                 weekday = True
                 spans = [(match.start(), match.end())]
                 break
         else:
-            match = re.search(r"\bkal\b", text, re.I)
+            match = _find_word(text, "kal", "कल")
             if match:
                 offset, spans = 1, [(match.start(), match.end())]
             else:
-                match = re.search(r"\baaj\b", text, re.I)
+                match = _find_word(text, "aaj", "आज")
                 if match:
                     spans = [(match.start(), match.end())]
 
@@ -140,9 +175,9 @@ def _extract(text: str, now: datetime) -> tuple[list[tuple[int, int]], datetime 
     if match and _num(match.group(2)) is not None:
         base = _num(match.group(2) or "") or 0
         kind = match.group(1).lower()
-        if kind.startswith("sava"):
+        if kind.startswith("sava") or kind == "सवा":
             hour, minute = base, 15
-        elif kind.startswith("paun"):
+        elif kind.startswith("paun") or kind in ("पौने", "पोने"):
             hour, minute = base - 1, 45
         else:
             hour, minute = base, 30
@@ -150,12 +185,16 @@ def _extract(text: str, now: datetime) -> tuple[list[tuple[int, int]], datetime 
     else:
         match = _CLOCK.search(text)
         if match:
-            hour, minute = int(match.group(1)), int(match.group(2))
-            meridiem = (match.group(3) or "").lower()
+            hour, minute = int(match.group(2)), int(match.group(3))
+            meridiem = (match.group(6) or "").lower()
+            part = (match.group(1) or match.group(5) or "").lower()
+            part = _DAYPART_DEV.get(part, part)
             if meridiem == "am":
                 hour, explicit = hour % 12, True
             elif meridiem == "pm":
                 hour, explicit = hour % 12 + 12, True
+            elif part:
+                hour, explicit = _daypart_hour(hour, part), True
             spans.append((match.start(), match.end()))
         else:
             match = next(
@@ -168,19 +207,26 @@ def _extract(text: str, now: datetime) -> tuple[list[tuple[int, int]], datetime 
                 else:
                     hour, explicit = num % 12 + 12, True
                 spans.append((match.start(), match.end()))
-            trail = _BAJE_TRAIL.search(text) if hour is None else None
+            trail = None
+            if hour is None:
+                trail = next(
+                    (m for m in _BAJE_TRAIL.finditer(text) if _num(m.group(1)) is not None),
+                    None,
+                )
             if hour is None:
                 match = next(
                     (m for m in _BAJE.finditer(text) if _num(m.group(2)) is not None), None
                 )
             if trail:
-                hour = int(trail.group(1))
-                hour = _daypart_hour(hour, trail.group(2).lower())
+                hour = _num(trail.group(1)) or 0
+                part = _DAYPART_DEV.get(trail.group(3).lower(), trail.group(3).lower())
+                hour = _daypart_hour(hour, part)
                 explicit = True
                 spans.append((trail.start(), trail.end()))
             elif match and _num(match.group(2)) is not None:
                 hour = _num(match.group(2) or "") or 0
                 part = (match.group(1) or "").lower()
+                part = _DAYPART_DEV.get(part, part)
                 meridiem = (match.group(3) or "").lower()
                 if meridiem == "am":
                     hour, explicit = hour % 12, True
@@ -234,8 +280,8 @@ def split_task_time(text: str, now: datetime | None = None) -> tuple[str, dateti
         ch for i, ch in enumerate(text) if not any(s <= i < e for s, e in spans)
     )
     kept = _DILA_DENA.sub(" ", kept)
-    words = [w for w in re.split(r"\s+", kept.strip()) if w.lower().strip(".,!?;:") not in FILLERS]
-    task = re.sub(r"\s+", " ", " ".join(words)).strip(" .,!?;:")
+    words = [w for w in re.split(r"\s+", kept.strip()) if w.lower().strip(".,!?;:।") not in FILLERS]
+    task = re.sub(r"\s+", " ", " ".join(words)).strip(" .,!?;:।")
     return task, moment
 
 
