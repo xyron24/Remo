@@ -2,8 +2,6 @@
 
 <img src="assets/remo-logo.png" alt="Remo logo" width="280">
 
-# Remo
-
 ### Speak once. Remember forever. Know what changed.
 
 **A Hinglish + Marathi voice memory that answers *where you left off* and briefs *what changed while you were away*.**
