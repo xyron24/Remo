@@ -40,7 +40,7 @@ Supported platforms:
 
 ## Demo
 
-[![Watch the Remo demo video](https://img.youtu.be/sqmf190G0R4/maxresdefault.jpg)](https://youtu.be/AwqtV3njztQ)
+[![Watch the Remo demo video](https://img.youtu.be/sqmf190G0R4/maxresdefault.jpg)](https://youtu.be/sqmf190G0R4)
 
 Watch the demo on YouTube: <https://youtu.be/sqmf190G0R4>
 
