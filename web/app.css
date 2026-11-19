@@ -726,3 +726,28 @@ li.deletable { padding-right: 2.6rem; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---- motion layer: transform/opacity only, silenced above when reduced ---- */
+.mic-halo { animation: halo-idle 3.4s ease-in-out infinite; }
+@keyframes halo-idle { 0%, 100% { opacity: 0.6; } 50% { opacity: 0.2; } }
+
+.toast { animation: toast-in 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+.toast.bye { opacity: 0; transform: translateX(28px); transition: opacity 0.3s, transform 0.3s; }
+@keyframes toast-in { from { opacity: 0; transform: translateX(28px); } }
+
+.side-nav a { position: relative; }
+.side-nav a::before {
+  content: ""; position: absolute; left: 1px; top: 22%; bottom: 22%; width: 3px;
+  border-radius: 3px; background: var(--bordo);
+  transform: scaleY(0); transition: transform 0.22s ease;
+}
+.side-nav a.active::before { transform: scaleY(1); }
+
+body[data-app-state="thinking"] #side-dot,
+body[data-app-state="speaking"] #side-dot { animation: pulse-beat 1s ease-in-out infinite; }
+body[data-app-state="speaking"] .mark { animation: pulse-beat 1.5s ease-in-out infinite; }
+
+.badge.pop { animation: badge-pop 0.4s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes badge-pop { 0% { transform: scale(1.45); } 100% { transform: scale(1); } }
+
+.leaving { overflow: hidden; }

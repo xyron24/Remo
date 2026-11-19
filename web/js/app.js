@@ -15,6 +15,7 @@
   const SPEAKER_NAME = { "hi-IN": "Nalini", "mr-IN": "Zahira" };
   let homeVoice = null;
   let askVoice = null;
+  const MOTION = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   /* ---------- helpers ---------- */
   function esc(s) {
@@ -33,12 +34,14 @@
     div.className = "toast" + (err ? " err" : "");
     div.textContent = text;
     box.appendChild(div);
+    setTimeout(() => div.classList.add("bye"), 3900);
     setTimeout(() => div.remove(), 4200);
     while (box.children.length > 4) box.firstChild.remove();
   }
   function setSide(state, label) {
     $("side-dot").className = `dot ${state}`;
     $("side-status").textContent = label;
+    document.body.dataset.appState = state;
     const mark = document.querySelector(".mark");
     if (mark) {
       mark.style.background = state === "speaking"
@@ -335,6 +338,25 @@
     const raw = location.hash.replace("#/", "").split("?")[0] || "home";
     return PAGES.includes(raw) ? raw : "home";
   }
+  const PAGE_ENTER = { home: "up", ask: "left", memories: "left", work: "up", reminders: "up", watchlist: "right", briefing: "up", voice: "right", settings: "up", profile: "up" };
+  function enterPage(page) {
+    if (!MOTION) return;
+    const root = $(`page-${page}`);
+    if (!root) return;
+    const dir = PAGE_ENTER[page] || "up";
+    const from = dir === "left" ? { opacity: 0, transform: "translateX(22px)" }
+      : dir === "right" ? { opacity: 0, transform: "translateX(-22px)" }
+      : { opacity: 0, transform: "translateY(14px)" };
+    Array.from(root.children).forEach((el, i) => {
+      el.animate([from, { opacity: 1, transform: "none" }],
+        { duration: 360, delay: Math.min(i * 55, 300), easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" });
+    });
+    // Rows and cards settle a beat later, staggered.
+    root.querySelectorAll(".rows > li, .stack > div, .activity > li, .cards > a, .try-chip").forEach((el, i) => {
+      el.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }],
+        { duration: 300, delay: Math.min(120 + i * 35, 500), easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" });
+    });
+  }
   function route() {
     const page = activePage();
     PAGES.forEach((p) => { $(`page-${p}`).hidden = p !== page; });
@@ -344,6 +366,7 @@
     document.querySelector(".shell").classList.remove("open");
     $("scrim").hidden = true;
     if (page === "briefing") renderBriefing();
+    enterPage(page);
   }
   window.addEventListener("hashchange", route);
 
@@ -440,6 +463,12 @@
     }
     if (data) pendingChips(data, div);
     box.prepend(div);
+    if (MOTION) {
+      div.animate(
+        [{ opacity: 0, transform: who === "You" ? "translateX(18px)" : "translateX(-18px)" },
+         { opacity: 1, transform: "none" }],
+        { duration: 320, easing: "cubic-bezier(.22,1,.36,1)" });
+    }
     while (box.children.length > 30) box.lastChild.remove();
     return pill;
   }
@@ -706,15 +735,38 @@
   function badge(id, n) {
     const el = $(id);
     if (!el) return;
-    if (n > 0) { el.textContent = n > 99 ? "99+" : String(n); el.hidden = false; }
+    const next = n > 0 ? (n > 99 ? "99+" : String(n)) : "";
+    const changed = next !== (el.hidden ? "" : el.textContent);
+    if (n > 0) { el.textContent = next; el.hidden = false; }
     else el.hidden = true;
+    if (MOTION && changed && n > 0) {
+      el.classList.remove("pop");
+      void el.offsetWidth;
+      el.classList.add("pop");
+    }
+  }
+
+  function countUp(id, to) {
+    const el = $(id);
+    if (!el) return;
+    const from = parseInt(el.textContent, 10);
+    if (!MOTION || Number.isNaN(from) || from === to || !el.offsetParent) {
+      el.textContent = to;
+      return;
+    }
+    const t0 = performance.now(), dur = 650;
+    (function frame(t) {
+      const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      el.textContent = Math.round(from + (to - from) * e);
+      if (k < 1) requestAnimationFrame(frame);
+    })(t0);
   }
 
   function renderAll(s) {
-    $("stat-notes").textContent = s.notes.length;
-    $("stat-pending").textContent = pendingCount(s);
-    $("stat-rem").textContent = s.reminders.length;
-    $("stat-watch").textContent = s.watched.length;
+    countUp("stat-notes", s.notes.length);
+    countUp("stat-pending", pendingCount(s));
+    countUp("stat-rem", s.reminders.length);
+    countUp("stat-watch", s.watched.length);
     badge("badge-notes", s.notes.length);
     badge("badge-work", pendingCount(s));
     badge("badge-rem", s.reminders.length);
@@ -743,8 +795,17 @@
     renderProfileStats(s);
   }
 
-  async function removeItem(kind, id, label) {
+  async function removeItem(kind, id, label, row) {
     if (!window.confirm(`Delete this ${label}? This cannot be undone.`)) return;
+    if (MOTION && row && row.isConnected) {
+      row.classList.add("leaving");
+      try {
+        await row.animate([
+          { opacity: 1, height: `${row.offsetHeight}px` },
+          { opacity: 0, height: "0px", marginTop: "0", marginBottom: "0", paddingTop: "0", paddingBottom: "0" },
+        ], { duration: 260, easing: "ease-in", fill: "forwards" }).finished;
+      } catch { /* aborted: fall through to delete */ }
+    }
     try {
       await API.remove(kind, id);
       toast("Deleted");
@@ -769,7 +830,10 @@
     b.title = `Delete this ${label}`;
     b.setAttribute("aria-label", `Delete this ${label}`);
     b.innerHTML = `<svg><use href="#i-x"/></svg>`;
-    b.onclick = (e) => { e.stopPropagation(); removeItem(kind, id, label); };
+    b.onclick = (e) => {
+      e.stopPropagation();
+      removeItem(kind, id, label, e.currentTarget.closest("li, div.panel, div.deletable"));
+    };
     return b;
   }
 
