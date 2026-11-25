@@ -38,11 +38,6 @@ Supported platforms:
 - [x] Android / iOS (via any browser)
 - [x] Any phone (voice-first design; live call interface on the roadmap)
 
-## Demo
-
-[![Watch the Remo demo video](https://img.youtube.com/vi/sqmf190G0R4/hqdefault.jpg)](https://youtu.be/sqmf190G0R4)
-
-Watch the demo on YouTube: <https://youtu.be/sqmf190G0R4>
 
 ## Architecture
 
